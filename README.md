@@ -1,5 +1,5 @@
 # CSMPy
-a Python implemenation of the Continuous Simulation Modeling Program (CSMP)
+a Python implementation of the Continuous Simulation Modeling Program (CSMP)
 
 CSMPy (-Py pronounced as in 'happy'!) aims to provide a simulation environment that supports CSMP-models with as little adaptation as possible. 
 
