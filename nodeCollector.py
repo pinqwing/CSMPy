@@ -87,22 +87,6 @@ class IntegralCollector(DeclarationCollector):
 
 
         
-class ConstantCollector(DeclarationCollector):        
-    wrapperClass = ConstantDecl
-    
-    def run(self, tree, varType: VarType):
-        self.varType    = varType
-        self.originator = "%sCheck" % varType.name.capitalize()
-        return super().run(tree)
-    
-    
-    def _processNode_(self, node):
-        if isinstance(node.value, ast.Call) and node.value.func.id == self.varType.name:
-            return self.accept(node, self.varType)
-        return node
-
-
-        
 class SectionCollector(NodeCollector):        
     wrapperClass = LabelDecl
     
@@ -118,8 +102,34 @@ class SectionCollector(NodeCollector):
 
 
         
+class ConstantCollector(DeclarationCollector):        
+    '''
+    collects constant declarations in the format NAME = VVVVV(<value>)
+    where VVVVV is one of CONSTANT, PARAM or INCON.
+    '''
+    wrapperClass = ConstantDecl
+    
+    def run(self, tree, varType: VarType):
+        self.varType    = varType
+        self.originator = "%sCheck" % varType.name.capitalize()
+        return super().run(tree)
+    
+    
+    def _processNode_(self, node):
+        if isinstance(node.value, ast.Call) and node.value.func.id == self.varType.name:
+            # cut the middle man (func):
+            node.value = node.value.args[0] # for now, only 1-element constants allowed
+            return self.accept(node, varType = self.varType)
+        return node
+
+
+        
 class VarlistCollector(NodeCollector):
-    #wrapperClass = ConstantDecl
+    '''
+    collects constant declarations in the format VVVVV(NAME = <value>, ...)
+    where VVVVV is one of CONSTANT, PARAM or INCON.
+    '''
+    wrapperClass = ConstantDecl
     
     def run(self, tree, varType: VarType, existing):
         self.varType        = varType
@@ -132,7 +142,7 @@ class VarlistCollector(NodeCollector):
         if isinstance(node.value, ast.Call) and node.value.func.id == self.varType.name:
             s = "\n".join([ast.unparse(k) for k in node.value.keywords])
             for n in ast.parse(s).body:
-                self.accept(n, name = n.targets[0].id, varType = self.varType, line = (node.lineno, node.end_lineno))
+                self.accept(n, varType = self.varType, line = (node.lineno, node.end_lineno))
             return None
         return node
     

@@ -60,21 +60,19 @@ class NodeWrap:
 
 class ConstantDecl(NodeWrap): 
     
-    def __init__(self, node: ast.AST, varType = VarType.NONE):
-        super().__init__(node)
-        self.varType = varType
-        
-    name = property(lambda s: s.node.targets[0].id)
+    name    = property(lambda s: s.node.targets[0].id)
+    value   = property(lambda s: ast.unparse(s.node.value)) 
 
-        
+    
 
 
-class IntegralDecl(ConstantDecl): 
+class IntegralDecl(NodeWrap): 
     
     def __init__(self, node: ast.AST):
-        super().__init__(node, VarType.INTGRL)
+        super().__init__(node, varType = VarType.INTGRL)
         self.index = -1
         
+    name = property(lambda s: s.node.targets[0].id)
     
     def getDeclaration(self, index):
         x0   = ast.unparse(self.node.value.args[0])

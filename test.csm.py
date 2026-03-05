@@ -22,7 +22,14 @@ GPHOT   = GPHST * (1. - EXP(-0.7 * LAI))
 LAI     = AMIN1(WSH / 500.,  5.)
 # EX1, R1 = EXPONENTIAL(10., 0.1, 5) 
 EX2, R2 = EXPONENTIAL(WRTI, CVF, GPHST / 5.) 
-PARAM (CVF = 0.7, GPHST = 400.)
+PARAM(
+    CVF = 0.7, 
+    GPHST = 400.
+    )
+CONSTANT(
+    PI = 3.141592,
+    PI2 = 2 * PI
+    )      
 
 TIMER(FINTIM = 100., DELT = 1., PRDEL = 5., OUTDEL = 5.)
 METHOD("RECT")
