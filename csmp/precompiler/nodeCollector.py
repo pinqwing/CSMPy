@@ -132,18 +132,17 @@ class VarlistCollector(NodeCollector):
     '''
     wrapperClass = ConstantDecl
     
-    def run(self, tree, varType: VarType, existing):
+    def run(self, tree, varType: VarType):
         self.varType        = varType
         self.visit_Expr     = self._processNode_
         items = super().run(tree)
-        # self.checkMultipleDefinitions(items)
         return items 
     
     def _processNode_(self, node):
         if isinstance(node.value, ast.Call) and node.value.func.id == self.varType.name:
             s = "\n".join([ast.unparse(k) for k in node.value.keywords])
             for n in ast.parse(s).body:
-                self.accept(n, varType = self.varType, line = (node.lineno, node.end_lineno))
+                self.accept(n, varType = self.varType, lines = (node.lineno, node.end_lineno))
             return None
         return node
     

@@ -1,12 +1,21 @@
 import ast
 import inspect
+from io import StringIO
+from csmp.errors import ProgramError
         
     
 class TemplateBuilder(ast.NodeTransformer):
     
     def __init__(self, template):
+
+        if isinstance(template, type):
+            source      = inspect.getsource(template)
+        elif isinstance(template, str):
+            source      = template
+        else:
+            raise ProgramError("unsupported template of type '%s'" % (type(template).__name__))
+        
         self.template   = template
-        source          = inspect.getsource(template)
         self.code       = ast.parse(source)
         self.code.body[0].name = self.code.body[0].name.replace("Template", "")
         
@@ -29,9 +38,14 @@ class TemplateBuilder(ast.NodeTransformer):
         ast.fix_missing_locations(self.code)
             
         
-    def write(self):
-        print(ast.unparse(self.code))
+    def write(self, file):
+        print(ast.unparse(self.code), file = file)
         
+    def toString(self):
+        ss = StringIO()
+        self.write(ss)
+        return ss.getvalue()
+
     
     def getClass(self, **compilerArgs):    
         obj = compile(self.code, filename="<ast>", mode="exec", **compilerArgs)

@@ -1,11 +1,7 @@
 
 
-0001 from keywords import MACRO, TITLE, PARAM, CONSTANT, METHOD, TIMER, OUTPUT, PRINT
-ERROR ** No module named 'keywords' (NodeWrap)
-
-0002 from functions import EXP, AMIN1
-ERROR ** No module named 'functions' (NodeWrap)
-
+0001 from csmp.keywords import MACRO, TITLE, PARAM, CONSTANT, METHOD, TIMER, OUTPUT, PRINT
+0002 from csmp.functions import EXP, AMIN1
 0003 
 0004 TITLE("DRY MATTER PRODUCTION")
 0005 
@@ -26,23 +22,29 @@ ERROR ** No module named 'functions' (NodeWrap)
 0020 MAINT   = (WSH + WRT) * 0.015
 0021 GPHOT   = GPHST * (1. - EXP(-0.7 * LAI))
 0022 LAI     = AMIN1(WSH / 500.,  5.)
-0023 EX1, R1 = EXPONENTIAL(10., 0.1, 5) 
-0024 EX2, R2 = EXPONENTIAL(WRTI, CVF, GPHST / 5.) 
-0025 PARAM(
-0026     CVF = 0.7, 
-0027     GPHST = 400.
-0028     )
-0029 CONSTANT(
-0030     PI = 3.141592,
-0031     PI2 = 2 * PI
-0032     )      
-0033 
-0034 TIMER(FINTIM = 100., DELT = 1., PRDEL = 5., OUTDEL = 5.)
-0035 METHOD("RECT")
-0036 PRINT(TWT, WSH, WRT, GTW)
-0037 OUTPUT(TWT)
-0038 
+0023 EX1, R1 := EXPONENTIAL(10., 0.1, 5) # test macro
+0024 EX2, R2 = EXPONENTIAL(WRTI, CVF, GPHST / 5.) # test macro
+0025  
+0026 PARAM(
+0027     CVF = 0.7, 
+0028     GPHST = 400.,
+0029     PPI = PI    # test param depeding on constant
+0030     )
+0031 CONSTANT(
+0032     PI = 3.141592,
+0033     PI2 = 2 * PI,   # test of dependent constant
+0034     )      
+0035 
+0036 TIMER(FINTIM = 100., DELT = 1., PRDEL = 5., OUTDEL = 5.)
+0037 METHOD("RECT")
+0038 PRINT(TWT, WSH, WRT, GTW)
+0039 OUTPUT(TWT)
+0040 
 
 
-       2 error(s)
+ERROR ** the model contains syntax errors and could not be parsed (processCode)
+ERROR ** invalid syntax 
+ERROR ** EX1, R1 := EXPONENTIAL(10., 0.1, 5) # test macro 
+ERROR **         ^ 
+       1 error(s)
        0 warning(s)

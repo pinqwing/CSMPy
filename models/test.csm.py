@@ -1,5 +1,5 @@
-from keywords import MACRO, TITLE, PARAM, CONSTANT, METHOD, TIMER, OUTPUT, PRINT
-from functions import EXP, AMIN1
+from csmp.keywords import MACRO, TITLE, PARAM, CONSTANT, METHOD, TIMER, OUTPUT, PRINT
+from csmp.functions import EXP, AMIN1
 
 TITLE("DRY MATTER PRODUCTION")
 
@@ -20,15 +20,17 @@ GTW     = (GPHOT - MAINT) * CVF
 MAINT   = (WSH + WRT) * 0.015
 GPHOT   = GPHST * (1. - EXP(-0.7 * LAI))
 LAI     = AMIN1(WSH / 500.,  5.)
-EX1, R1 = EXPONENTIAL(10., 0.1, 5) 
-EX2, R2 = EXPONENTIAL(WRTI, CVF, GPHST / 5.) 
+EX1, R1 = EXPONENTIAL(10., 0.1, 5) # test macro
+EX2, R2 = EXPONENTIAL(WRTI, CVF, GPHST / 5.) # test macro
+ 
 PARAM(
     CVF = 0.7, 
-    GPHST = 400.
+    GPHST = 400.,
+    PPI = PI    # test param depeding on constant
     )
 CONSTANT(
     PI = 3.141592,
-    PI2 = 2 * PI
+    PI2 = 2 * PI,   # test of dependent constant
     )      
 
 TIMER(FINTIM = 100., DELT = 1., PRDEL = 5., OUTDEL = 5.)

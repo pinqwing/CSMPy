@@ -1,8 +1,9 @@
-import sys
-from logging import ERROR, WARNING, INFO, _levelToName as levelName
+import copy, sys
 from collections import defaultdict
+from logging import ERROR, WARNING, INFO, _levelToName as levelName
+
 from lib.singleton import Singleton
-import copy
+from csmp.errors import PrecompilerError
 
 
 class Lister(metaclass = Singleton):
@@ -32,7 +33,7 @@ class Lister(metaclass = Singleton):
         self.messages = defaultdict(factory)
 
         
-    def addMessage(self, level: int, message: str, sourceLine: int, originator: str):
+    def addMessage(self, level: int, message: str, sourceLine: int, originator: str = None):
         self.messages[sourceLine][level].append((message, originator))
     
     def addError(self, message: str, sourceLine: int, originator: str):
@@ -45,21 +46,28 @@ class Lister(metaclass = Singleton):
         self.addMessage(INFO, message, sourceLine, originator)
         
         
-    def report(self, code, file = sys.stdout, lineOffset = 1, reportAll = False):
+    def addSyntaxErrorError(self, error, message: str, sourceLine: int, originator: str):
+        msg = PrecompilerError.rewriteSyntaxError(error, message)
+        self.addError(msg, sourceLine, originator)
+    
+        
+    def report(self, code, file = sys.stdout, reportAll = False, onlyMarkedLines = False):
         decoration = {ERROR: "**", WARNING: "!!", INFO: ">>"}
         
         messages = copy.copy(self.messages)
         
-        def printRemarks(line):
+        def printRemarks(lineNr, lineTxt = None):
             n = 0
-            all = messages.pop(line, {})
+            all = messages.pop(lineNr, {})
+            if lineTxt is not None and (all or not onlyMarkedLines):
+                print("%04d" % (lineNr), lineTxt, file = file)
             for level in (ERROR, WARNING, INFO):
                 messagesAtLevel = all.get(level, [])
                 for msg in messagesAtLevel:
                     deco    = decoration.get(level, "??")
                     lvl     = levelName[level]
                     text    = msg[0]
-                    sender  = "(%s)" % msg[1]
+                    sender  = "" if msg[1] is None else "(%s)" % msg[1]
                     for s in text if isinstance(text, list) else [text]:
                         print(f"{lvl} {deco} {s} {sender}", file = file)
                         sender = "" # do not repeat this
@@ -72,9 +80,8 @@ class Lister(metaclass = Singleton):
         printRemarks(self.INITIAL)
         print("\n", file = file)
         
-        for i, line in enumerate(code):
-            print("%04d" % (i + 1), line, file = file)
-            if printRemarks(i + lineOffset):
+        for i, line in enumerate(code, start = 1):
+            if printRemarks(i, line):
                 print("", file = file)
         
         
@@ -102,12 +109,13 @@ if __name__ == '__main__':
                         
     l = Lister()
     l.start()        
-    l.addWarning("started", 19, "test")
-    l.addError("error", 25, "test")
-    l.addWarning("warning", 25, "test")
+    l.addWarning("started", Lister.INITIAL, "test")
+    l.addError("error", 15, "test")
+    l.addWarning("warning", 15, "test")
+    l.addWarning("final warning", Lister.FINAL, None)
     
-    print(l.messages)
+    # print(l.messages)
     s = sys.modules[__name__]
     import inspect
-    l.report(inspect.getsource(s))
+    l.report(inspect.getsource(s), onlyMarkedLines = True)
     print(l.count())

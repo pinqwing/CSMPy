@@ -46,8 +46,6 @@ class NodeWrap:
     
     
     def addRemark(self, msg: str, errorLvl = lister.ERROR, originator = None):
-        if originator is None:
-            originator = type(self).__name__
         lister.Lister().addMessage(errorLvl, msg, self.getEnd(), originator)
     
     

@@ -5,6 +5,7 @@ from .lister import Lister
 from .nodeCollector import NodeCollector
 from .nodeWraps import NodeWrap
 from ..errors import MacroError
+from csmp.errors import PrecompilerError
 
 
 class FunCallWrap(NodeWrap):
@@ -98,10 +99,7 @@ class MacroDeclaration(FunCallWrap):
             self.inputs     = self._extractInputNames(declaration)
             self.outputs    = self._extractOutputNames(declaration)
         except SyntaxError as e:
-            msg  = e.args[0]   
-            col  = e.args[1][2]
-            line = e.args[1][3].replace("\n", "")
-            self.addRemark([msg, line, f"{'^':>{col}}"])
+            self.addRemark(PrecompilerError.rewriteSyntaxError(e, "error in MACRO:"))
 
 
     def unIndent(self, codeBlock):
