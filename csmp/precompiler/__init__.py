@@ -10,14 +10,15 @@ from csmp.errors import PrecompilerError, SegmentationError
 from csmp.keywords import CSMP_Function
 from csmp.precompiler.lister import Lister
 from csmp.precompiler.loader import ModelLoader
-from csmp.precompiler.macros import MacroCollector, MacroExpander
 from csmp.precompiler.nodeCollector import ImportCollector, ConstantCollector, \
-    VarlistCollector, IntegralCollector
-from csmp.precompiler.nodeWraps import CSMPWrap, NodeWrap
+    VarlistCollector, IntegralCollector, FundefCollector
+from csmp.precompiler.nodeWraps import CSMPWrap, NodeWrap, FunctionGeneratorWrap
 from csmp.precompiler.segment import ModelSegments, SegmentLabel
 from csmp.precompiler.sorter import Sorter
 from csmp.precompiler.template import TemplateBuilder
 from templates.simulationModelTemplate import SimulationModelTemplate
+from csmp.precompiler.macros import MacroDeclarationCollector,\
+    MacroExpansionCollector
 
 
 
@@ -48,6 +49,7 @@ class Precompiler:
         self.params     = []
         self.segments   = []
         self.states     = []
+        self.fundefs    = []
         
 
     def processCode(self):
@@ -69,9 +71,9 @@ class Precompiler:
     
     @Lister.withContextError
     def _macroExpansion(self):
-        self.macros = MacroCollector().run(self.ast)
+        self.macros = MacroDeclarationCollector().run(self.ast)
         macros = dict([(m.name, m) for m in self.macros])
-        MacroExpander().run(self.ast, macros)
+        MacroExpansionCollector().run(self.ast, macros)
         
         
     @Lister.withContextError
@@ -99,6 +101,7 @@ class Precompiler:
         
         # order matters below
         addDeclarations(IntegralCollector().run(self.ast), self.states)
+        addDeclarations(FundefCollector().run(self.ast), self.fundefs)
         addDeclarations(ConstantCollector().run(self.ast, VarType.CONSTANT), self.consts)
         addDeclarations(VarlistCollector().run(self.ast, VarType.CONSTANT), self.consts)
         addDeclarations(ConstantCollector().run(self.ast, VarType.PARAM), self.params)
@@ -125,6 +128,10 @@ class Precompiler:
             wrap = CSMPWrap(node, **info) 
             return wrap if wrap.status >= 0 else None
             # return CSMPWrap(node, **info) if info.get('status', -999) >= 0 else None
+        elif (isinstance(node, ast.Assign) and 
+              isinstance(node.value, ast.Call) and 
+              node.value.func.id in ("AFGEN", "NLFGEN")):
+            return FunctionGeneratorWrap(node, self.fundefs)
         else:   
             return NodeWrap(node)
     
@@ -174,6 +181,9 @@ class Precompiler:
         for s in self.states:
             codeSorter.addSymbol(s.name)
                 
+        for s in self.fundefs:
+            codeSorter.addSymbol(s.name)
+                
         for segment in self.segments:
             segment.sort(codeSorter)
             
@@ -186,7 +196,8 @@ class Precompiler:
             s = "global %s" % ", ".join(variables) if variables else "# (nothing to do)" 
             return ast.parse(s)
 
-        builder = TemplateBuilder(template)
+        generators  = itertools.chain.from_iterable([f.clients for f in self.fundefs])
+        builder     = TemplateBuilder(template)
         builder.replace(":commonBlock:", common())
 
         builder.replace(":parameters:",     [w.statement for w in self.params], False)
@@ -194,6 +205,8 @@ class Precompiler:
         builder.replace(":incons:",         [w.statement for w in self.incons])
         builder.replace(":systemParams:",   [w.statement for w in self.init])
         
+        builder.replace(":functions:",      [w.getDeclaration(i)     for i, w in enumerate(self.fundefs)])
+        builder.replace(":generators:",     [w.getDeclaration(i)     for i, w in enumerate(generators)])
         builder.replace(":initStates:",     [w.getDeclaration(i)     for i, w in enumerate(self.states)])
         builder.replace(":restoreValues:",  [w.getStateValue(i)      for i, w in enumerate(self.states)])
         builder.replace(":update:",         [w.getUpdateStatement(i) for i, w in enumerate(self.states)])
@@ -255,3 +268,14 @@ class Precompiler:
         except:
             print("*** segmentation incomplete")
             
+if __name__ == '__main__':
+    mdl = Precompiler()
+    mdl.compile("../../models/test.csm.py")
+    mdl.printSummary()
+    # print("\n", '-'*80, '\n')
+    mdl.saveListFile(True)
+    print("\n", '-'*80, '\n')
+    mdl.writeTemplate()
+    # mdl.debugSegmentation()
+    # for o in sorted(NodeWrap.objects, key=lambda o: str(o)):
+    #     print(o)    

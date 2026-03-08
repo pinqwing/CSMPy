@@ -1,5 +1,6 @@
-from csmp.keywords import MACRO, TITLE, PARAM, CONSTANT, METHOD, TIMER, OUTPUT, PRINT
+from csmp import MACRO, TITLE, PARAM, CONSTANT, METHOD, TIMER, OUTPUT, PRINT
 from csmp.functions import EXP, AMIN1
+from csmp import Clip
 
 TITLE("DRY MATTER PRODUCTION")
 
@@ -22,7 +23,12 @@ GPHOT   = GPHST * (1. - EXP(-0.7 * LAI))
 LAI     = AMIN1(WSH / 500.,  5.)
 EX1, R1 = EXPONENTIAL(10., 0.1, 5) # test macro
 EX2, R2 = EXPONENTIAL(WRTI, CVF, GPHST / 5.) # test macro
- 
+REDFT   = FUNCTION(0.,1.,0.2,1.,0.25,0.,0.5,0.)
+REDFT1   = FUNCTION(0.,1.,0.2,1.,0.25,0.,0.5,0.)
+REDFT2   = FUNCTION(0.,1.,0.2,1.,0.25,0.,0.5,0.)
+REDF    = AFGEN(REDFT,LAI*4 - R1, extra=Clip)
+REDF2    = AFGEN(REDFT,LAI*4 - R1, extra=Clip)
+REDF2    = AFGEN(REDFT,LAI*4 - R1, extra=Clip)
 PARAM(
     CVF = 0.7, 
     GPHST = 400.,

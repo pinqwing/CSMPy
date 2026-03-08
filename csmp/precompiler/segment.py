@@ -71,7 +71,7 @@ class Section:
 
 
     def statements(self):
-        return [w.node for w in self.items]
+        return [w.statement for w in self.items]
     
     
     def contains(self, lineNumber):

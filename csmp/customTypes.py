@@ -21,6 +21,6 @@ class VarType(Enum):
     PARAM    = 1
     INCON    = 2
     CONSTANT = 3
-
+    FUNCTION = 4
 
     

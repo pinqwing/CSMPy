@@ -5,6 +5,7 @@ from enum import Enum
 from ..customTypes import VarType
 from .nodeWraps import NodeWrap, IntegralDecl, ConstantDecl, LabelDecl
 from .segment import SegmentLabel
+from csmp.precompiler.nodeWraps import FunctionDecl
 
 
 class NodeCollector(ast.NodeTransformer):
@@ -69,6 +70,36 @@ class DeclarationCollector(NodeCollector):
         return items 
     
     
+class FundefCollector(DeclarationCollector):        
+    ''' function declaration collector
+    
+    Collects FUNCTION-statements.
+    
+    note:
+        AFGEN & NLFGEN are not pre-collected by any Collector.
+        Instead, they are dealt with like with any csmp-statement,
+        only the FunctionGeneratorWraps make themselves known
+        to their FunctionDecl-s so they can hitch hike along
+        to get their declaration lines inserted.
+    '''
+    wrapperClass = FunctionDecl
+    
+    def run(self, tree):
+        self.originator = "functionDeclarationCheck"
+        return super().run(tree)
+    
+    @staticmethod
+    def matches(node):    
+        return isinstance(node.value, ast.Call) and node.value.func.id == "FUNCTION"
+    
+    
+    def _processNode_(self, node):
+        if self.matches(node):
+            return self.accept(node)
+        return node
+
+
+        
 class IntegralCollector(DeclarationCollector):        
     wrapperClass = IntegralDecl
     

@@ -19,7 +19,8 @@ class SimulationModelTemplate(CSMP_Model):
         globals().update(self.defineConstants())
         globals().update(self.defineParameters())
         globals().update(self.initial())
-        
+        ':functions:'
+        ':generators:'
         ':initStates:'
         ':systemParams:'
         

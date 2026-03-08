@@ -3,10 +3,12 @@ import copy
 from ..customTypes import VarType
 from ..keywords import CSMP_Function
 from . import lister
+from _collections import defaultdict
 
 
 
 class NodeWrap:
+    objects = []
     
     remarkCallback = lambda *args, **kwargs: None # one assignment to rule all
     
@@ -19,7 +21,8 @@ class NodeWrap:
         for n, v in kwargs.items():
             setattr(self, n, v) 
          
-
+        self.objects.append(self)
+        
     
     def getStatement(self):
         return self.node
@@ -54,35 +57,98 @@ class NodeWrap:
     
     
 
-
-
-
-class ConstantDecl(NodeWrap): 
-    
+class Assignment(NodeWrap):
     name    = property(lambda s: s.node.targets[0].id)
+
+
+class ConstantDecl(Assignment): 
     value   = property(lambda s: ast.unparse(s.node.value)) 
 
-    
 
-
-class IntegralDecl(NodeWrap): 
+class ReferencedAssignment(Assignment):
     
-    def __init__(self, node: ast.AST):
-        super().__init__(node, varType = VarType.INTGRL)
-        self.index = -1
+    instances = defaultdict(list)
+
+    def __init__(self, node: ast.AST, **kwargs):
+        super().__init__(node, **kwargs)
+        instanceList = ReferencedAssignment.instances[self._instanceLabel()]
+        instanceList.append(self)
+        self.index   = instanceList.index(self)
         
-    name = property(lambda s: s.node.targets[0].id)
+    
+    @classmethod
+    def _instanceLabel(cls):
+        return "%s::%s" % (type(cls).__name__, cls.varType.name)
+    
+    @classmethod
+    def _clear(cls):
+        cls.instances[cls._instanceLabel()].clear()
+        
+    @classmethod
+    def clearAll(cls):
+        cls.instances.clear()
+        
+        
+    def _getArgs(self):
+        return ",".join([ast.unparse(arg) for arg in self.node.value.args])
+
     
     def getDeclaration(self, index):
-        x0   = ast.unparse(self.node.value.args[0])
-        mod  = ast.parse(f"self.createStateVariable({index}, '{self.name}', {x0})")
+        args = self._getArgs() 
+        mod  = ast.parse(f"self.createCsmpFunction({index}, '{self.name}', {args})")
         self.index = index
         return mod.body[0]
+
+    
+    
+
+class FunctionDecl(ReferencedAssignment): 
+    varType = VarType.FUNCTION
+    
+    def __init__(self, node: ast.AST):
+        super().__init__(node, varType = self.varType)
+        self.clients = []
+        
+
+    
+class FunctionGeneratorWrap(ReferencedAssignment):
+    varType = VarType.NONE
+     
+    def __init__(self, node: ast.AST, functionList: list):
+        super().__init__(node)
+        fName = node.value.args[0].id
+        for fn in functionList:
+            if fn.name == fName:
+                self.function = fn
+                fn.clients.append(self)
+                break
+        else:
+            self.addRemark(f"unknown FUNCTION '{fName}'")
+    
+            
+    def getStatement(self):
+        arg = ast.unparse(self.node.value.args[1])
+        mod = ast.parse(f"{self.name} = self.functionGenerators[{self.index}].getValue({arg})")
+        return mod.body[0]
+    
+        
+    def getDeclaration(self, index):
+        call = self.node.value.func.id
+        arg  = ast.unparse(self.node.value.args[1])
+        kwds = ", ".join([ast.unparse(k) for k in self.node.value.keywords])
+        mod  = ast.parse(f"self.createCsmp{call}({self.index}, function = {self.function.index}, {kwds})")
+        return mod.body[0]
+
+        
+
+class IntegralDecl(ReferencedAssignment): 
+    varType = VarType.INTGRL
     
     def getStateValue(self, index):
         assert index == self.index
         mod  = ast.parse(f"{self.name} = self.getState({index})")
         return mod.body[0]
+    
     
     def getUpdateStatement(self, index):
         assert index == self.index
@@ -105,10 +171,11 @@ class LabelDecl(NodeWrap):
         
         
 class CSMPWrap(NodeWrap):
-    def __init__(self, node: ast.AST, status = 0, varlist = False, name = "keyword"):
+    def __init__(self, node: ast.AST, status = 0, varlist = False, name = "keyword", translation = "", **moreArgs):
         super().__init__(node)
         self.status     = status
         self.toVarList  = varlist
+        self.translation= translation
         
         if status == CSMP_Function.IGNORED:
             self.addRemark("CSMP statement %s ignored" % name, lister.INFO)
@@ -135,6 +202,28 @@ class CSMPWrap(NodeWrap):
         else:
             node.value.func.id = "self.set" + node.value.func.id.capitalize()
             return node
+        
+        
+    # def getStatement(self):
+    #     node    = copy.deepcopy(self.node)
+    #     name    = node.value.func.id.capitalize()
+    #     target  = node.targets[0].id if isinstance(node, ast.Assign) else ""
+    #     # note: more than 1 target should not occur
+    #
+    #     # simple case:
+    #     if not (self.toVarList or self.translation):
+    #         node.value.func.id = f"self.set{name}"  
+    #         return node
+    #
+    #     # transliterations:
+    #     if self.toVarList:
+    #         args = ",".join(['"%s"' % arg.id for arg in node.value.args])
+    #     else:
+    #         args = ",".join([ast.unparse(arg) for arg in node.value.args])
+    #
+    #     s = "self.set{name}({args})" if not self.translation else self.translation 
+    #
+    #     return ast.parse(s.format(**locals()))
         
 
         
