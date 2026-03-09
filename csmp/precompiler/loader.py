@@ -33,19 +33,12 @@ class ModelLoader:
         return inspect.getsource(self.module)
         
         
-    def saveList(self, file = None, summary = False):
+    def getFilepath(self, extension = None):
+        if extension is None:
+            return self.file
+        else: 
+            p = self.file.with_suffix("")
+            return p.with_suffix(extension)
         
-        def write(f):
-            Lister().report(self.getSource(), file = f, onlyMarkedLines = summary)
-            print("%8d error(s)\n%8d warning(s)" % Lister().count(), file = f)
-            
-        if file is None:
-            path = self.file.with_suffix(".lst")
-            with path.open("w") as f:
-                write(f)
-        else:
-            write(file)
         
-
-
-
+    

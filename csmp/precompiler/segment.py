@@ -34,18 +34,16 @@ class SegmentLabel(Enum):
     
     
 
-class Section:
+class __baseSection__:
     
-    def __init__(self, label = SegmentLabel.SORT, startsAt = 0, default = False):
+    def __init__(self, label = SegmentLabel.SORT, startsAt = 0):
         self.label      = label
         self.lines      = [startsAt] * 2
-        self.items      = []
-        self.default    = default # TODO obsolete?
 
 
     def __repr__(self):
-        return "%s-section%s (line %d; %d item(s))" % (self.label.name, '*' if self.default else '', 
-                                                       self.start, len(self.items))
+        return "%s-section (line %d; %d item(s))" % (self.label.name, self.start, len(self.items))
+    
     
     def getStart(self): return self.lines[0]
     
@@ -59,23 +57,36 @@ class Section:
         self.lines[1] = endLine
         self.lines[0] = min(self.lines)
 
+
+    def contains(self, lineNumber):
+        return self.lines[0] <= lineNumber <= self.lines[1]
+    
+    
     start   = property(getStart, setStart)
     end     = property(getEnd,   setEnd)
     sorted  = property(lambda s: s.label.value[-1])
         
-        
+       
+class Section(__baseSection__):        
+
+    def __init__(self, label = SegmentLabel.SORT, startsAt = 0):
+        super().__init__(label, startsAt)
+        self.items      = []
+
     def append(self, item):
         if not isinstance(item, NodeWrap):
             raise SegmentationError("invalid sub-item '%s'" % (item))
         self.items.append(item)
 
 
+    def getItems(self):
+        # wrapped statements
+        return [w for w in self.items]
+    
+    
     def statements(self):
+        # naked statements
         return [w.statement for w in self.items]
-    
-    
-    def contains(self, lineNumber):
-        return self.lines[0] <= lineNumber <= self.lines[1]
     
     
     def sort(self, sorter):
@@ -106,7 +117,7 @@ class Section:
         
         
 
-class ModelSegment(Section):
+class ModelSegment(__baseSection__):
     UNSELECT = 0
     IMPLICIT = 1
     EXPLICIT = 2
@@ -115,10 +126,10 @@ class ModelSegment(Section):
         if not label.isSegment():
             raise SegmentationError("%s is not a valid precompiler segment (line %d)" % (label.name, startsAt))
         super().__init__(label, startsAt)
-        self.currentSection = self.appendSection(Section(SegmentLabel.SORT if self.sorted else SegmentLabel.NOSORT, default = True))
+        self.sections       = []        
+        self.currentSection = self.appendSection(Section(SegmentLabel.SORT if self.sorted else SegmentLabel.NOSORT))
         self.selected       = self.UNSELECT
         
-    sections = property(lambda s: s.items)
 
 
     def setStart(self, startLine):
@@ -148,11 +159,11 @@ class ModelSegment(Section):
         self.currentSection.end = max(line, self.currentSection.end)    
         
                 
-    def appendSection(self, item):
-        if not item.label.isSection():
-            raise SegmentationError("invalid sub-item '%s'" % (item))
-        self.items.append(item)
-        return item
+    def appendSection(self, section):
+        if not section.label.isSection():
+            raise SegmentationError("invalid sub-item '%s'" % (section))
+        self.sections.append(section)
+        return section
     
 
     def appendStatement(self, statement):
@@ -169,8 +180,8 @@ class ModelSegment(Section):
         self.sections[-1].end  = self.end
         
         for i, s in enumerate(self.sections):
-            s.start    = max(s.start, self.start)
-            s.end  = min(s.end, self.end)
+            s.start = max(s.start, self.start)
+            s.end   = min(s.end, self.end)
             if i > 0:
                 self[i-1].end  = min(self[i-1].end, self[i].start -1)
     
@@ -183,9 +194,18 @@ class ModelSegment(Section):
     
         
     def statements(self):
+        # naked statements
         result = []
         for s in self.sections:
             result += s.statements()
+        return result
+    
+    
+    def getItems(self):
+        # wrapped statements
+        result = []
+        for s in self.sections:
+            result += s.getItems()
         return result
     
     

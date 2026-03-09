@@ -1,15 +1,18 @@
 from csmp import MACRO, TITLE, PARAM, CONSTANT, METHOD, TIMER, OUTPUT, PRINT
-from csmp.functions import EXP, AMIN1
+from csmp import EXP, AMIN1
 from csmp import Clip
 
 TITLE("DRY MATTER PRODUCTION")
 
 MACRO("""
     X, DXDT  = EXPONENTIAL(X0, A, B)
-    X        = INTGRL(X0, DXTD)
-    DXDT     = A * (X - B)
+    X        = INTGRL(X0, DXDT)
+    RATE     = A * (X - B)
+    DXDT     = RATE
     """)
-    
+"INITIAL"
+T = 0
+"DYNAMIC"   
 TWT     = WSH + WRT
 WSH     = INTGRL(WSHI, GSH)
 WRT     = INTGRL(WRTI, GRT)

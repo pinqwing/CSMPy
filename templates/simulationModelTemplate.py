@@ -51,6 +51,8 @@ class SimulationModelTemplate(CSMP_Model):
         
         ":update:"
         
+        return locals()
+
         
     def final(self):
         """ 

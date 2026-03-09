@@ -68,7 +68,8 @@ class ConstantDecl(Assignment):
 class ReferencedAssignment(Assignment):
     
     instances = defaultdict(list)
-
+    declaration = "createXXXXXXXX"
+    
     def __init__(self, node: ast.AST, **kwargs):
         super().__init__(node, **kwargs)
         instanceList = ReferencedAssignment.instances[self._instanceLabel()]
@@ -93,17 +94,18 @@ class ReferencedAssignment(Assignment):
         return ",".join([ast.unparse(arg) for arg in self.node.value.args])
 
     
-    def getDeclaration(self, index):
+    def getDeclaration(self):
         args = self._getArgs() 
-        mod  = ast.parse(f"self.createCsmpFunction({index}, '{self.name}', {args})")
-        self.index = index
+        mod  = ast.parse(f"self.{self.declaration}({self.index}, '{self.name}', {args})")
+        ast.increment_lineno(mod, -1)
         return mod.body[0]
 
     
     
 
 class FunctionDecl(ReferencedAssignment): 
-    varType = VarType.FUNCTION
+    varType     = VarType.FUNCTION
+    declaration = "createCsmpFunction"
     
     def __init__(self, node: ast.AST):
         super().__init__(node, varType = self.varType)
@@ -128,32 +130,39 @@ class FunctionGeneratorWrap(ReferencedAssignment):
             
     def getStatement(self):
         arg = ast.unparse(self.node.value.args[1])
-        mod = ast.parse(f"{self.name} = self.functionGenerators[{self.index}].getValue({arg})")
+        mod = ast.parse(f"{self.name} = self.funcGenerators[{self.index}].getValue({arg})")
+        ast.increment_lineno(mod, -1)
         return mod.body[0]
     
         
-    def getDeclaration(self, index):
+    def getDeclaration(self):
         call = self.node.value.func.id
         arg  = ast.unparse(self.node.value.args[1])
         kwds = ", ".join([ast.unparse(k) for k in self.node.value.keywords])
         mod  = ast.parse(f"self.createCsmp{call}({self.index}, function = {self.function.index}, {kwds})")
+        ast.increment_lineno(mod, -1)
         return mod.body[0]
 
         
 
 class IntegralDecl(ReferencedAssignment): 
-    varType = VarType.INTGRL
+    varType     = VarType.INTGRL
+    declaration = "createStateVariable"
     
-    def getStateValue(self, index):
-        assert index == self.index
-        mod  = ast.parse(f"{self.name} = self.getState({index})")
+    def _getArgs(self):
+        return ast.unparse(self.node.value.args[0])
+
+    
+    def getStateValue(self):
+        mod  = ast.parse(f"{self.name} = self.getState({self.index})")
+        ast.increment_lineno(mod, -1)
         return mod.body[0]
     
     
-    def getUpdateStatement(self, index):
-        assert index == self.index
+    def getUpdateStatement(self):
         rate = ast.unparse(self.node.value.args[1])
-        mod  = ast.parse(f"self.setCurrentRate({index}, {rate})")
+        mod  = ast.parse(f"self.setCurrentRate({self.index}, {rate})")
+        ast.increment_lineno(mod, -1)
         return mod.body[0]
     
     

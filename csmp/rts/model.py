@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import sys
+from csmp.rts.csmpFunction import Csmp_Function, Csmp_AfGen, Csmp_NlfGen
         
 class StateVariable:
     
@@ -26,6 +27,36 @@ class Rect(Integrator):
         if delt > 0:
             self.delta = delt
     
+
+
+class Printer:
+    
+    def __init__(self, varNames = []):
+        self.varNames = varNames
+    
+    
+    def printHeader(self):
+        def printHdr(name):
+            print("{:>12}".format(name), end = "")
+        
+        print("{:>8.4}".format("TIME"), end = "")
+        for name in self.varNames:
+            printHdr(name)
+        print()
+            
+        
+    def print(self, time, values):
+        def printVar(name):
+            x = values.get(name, -99999)
+            print("{:>12.4f}".format(x), end = "")
+            # print("%12g" % x, end = "")
+        
+        print("{:>8.4E}".format(time), end = "")
+        # print("%8.4E" % time, end = "")
+        for name in self.varNames:
+            printVar(name)
+        print()
+            
     
             
 
@@ -75,17 +106,45 @@ class CSMP_Model(ABC):
         self.title          = 'simulation'
         self.timer          = Timer()
         self.globals        = {}
-        self.stateVariables = {}
-        self.stateNames     = {}
+        self.functionBlocks = {} # by both index & name
+        self.funcGenerators = {} # by both index & name
+        self.stateVariables = {} # by index
+        self.stateNames     = {} # by name
         self.integrator     = Rect()
+        self.printer        = Printer()
     
                 
+    def _addElement(self, element, itemDict, elementCatName, index = None, name = None):
+        def doAdd(dictIndex):
+            if dictIndex is None: return 
+            if dictIndex in itemDict:
+                raise Exception(f"attempt to redefine {elementCatName} with index {index} ('{name}')")
+            itemDict[dictIndex] = element
+            
+        doAdd(index)
+        doAdd(name)
+        return element
+    
+    
+    def createCsmpFunction(self, index, name, *args):
+        newFunction = Csmp_Function(*args)
+        return self._addElement(newFunction, self.functionBlocks, "function", index, name)
+    
+    
+    def createCsmpAFGEN(self, index, function, **kwargs):
+        newGenerator = Csmp_AfGen(self.functionBlocks[function], **kwargs)
+        return self._addElement(newGenerator, self.funcGenerators, "function generator", index)
+    
+    
+    def createCsmpNLFGEN(self, index, function, **kwargs):
+        newGenerator = Csmp_NlfGen(self.functionBlocks[function], **kwargs)
+        return self._addElement(newGenerator, self.funcGenerators, "function generator", index)
+    
+    
     def createStateVariable(self, index, name, initialValue):
-        if index in self.stateVariables:
-            raise Exception("attempt to redefine state variable with index %d ('%s')" % (index, name))
         newState = StateVariable(name, initialValue)
-        self.stateVariables[index]  = newState
-        self.stateNames[name]       = newState
+        self._addElement(newState, self.stateVariables, "state variable", index)
+        self._addElement(newState, self.stateNames,     "state variable", name = name)
         return newState
     
     
@@ -111,7 +170,7 @@ class CSMP_Model(ABC):
     
     
     def setPrint(self, *varNames):
-        pass
+        self.printer = Printer(varNames)
     
     
     def setOutput(self, *varnames):

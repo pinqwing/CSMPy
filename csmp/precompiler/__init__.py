@@ -64,7 +64,9 @@ class Precompiler:
             self._collectDeclarations()
             self._modelSegmentation()
             self._assignStatements()
+            self.writeCurrentSource(extension=".unstd")
             self._sortCodeBlocks()
+            self.writeCurrentSource(extension=".sort")
         except PrecompilerError:
             Lister().addError("parsing of the source code failed", Lister.FINAL, "processCode")
     
@@ -189,37 +191,77 @@ class Precompiler:
             
             
     @Lister.withContextError
-    def writeTemplate(self, file = sys.stdout, template = SimulationModelTemplate):
+    def writeTemplate(self, file = sys.stdout, template = SimulationModelTemplate, builder = None):
         
         def common():
             variables = self.segments[SegmentLabel.INITIAL].getAssignments()
             s = "global %s" % ", ".join(variables) if variables else "# (nothing to do)" 
-            return ast.parse(s)
+            node = ast.parse(s)
+            return [NodeWrap(node.body[0])] if node.body else []
 
         generators  = itertools.chain.from_iterable([f.clients for f in self.fundefs])
-        builder     = TemplateBuilder(template)
+        builder     = TemplateBuilder(template) if builder is None else builder
         builder.replace(":commonBlock:", common())
 
-        builder.replace(":parameters:",     [w.statement for w in self.params], False)
-        builder.replace(":constants:",      [w.statement for w in self.consts], False)
-        builder.replace(":incons:",         [w.statement for w in self.incons])
-        builder.replace(":systemParams:",   [w.statement for w in self.init])
+        builder.replace(":parameters:",     self.params, False)
+        builder.replace(":constants:",      self.consts, False)
+        builder.replace(":incons:",         self.incons)
+        builder.replace(":systemParams:",   self.init)
         
-        builder.replace(":functions:",      [w.getDeclaration(i)     for i, w in enumerate(self.fundefs)])
-        builder.replace(":generators:",     [w.getDeclaration(i)     for i, w in enumerate(generators)])
-        builder.replace(":initStates:",     [w.getDeclaration(i)     for i, w in enumerate(self.states)])
-        builder.replace(":restoreValues:",  [w.getStateValue(i)      for i, w in enumerate(self.states)])
-        builder.replace(":update:",         [w.getUpdateStatement(i) for i, w in enumerate(self.states)])
-
-        builder.replace(":initial:",  self.segments[SegmentLabel.INITIAL].statements())
-        builder.replace(":dynamic:",  self.segments[SegmentLabel.DYNAMIC].statements())
-        builder.replace(":terminal:", self.segments[SegmentLabel.TERMINAL].statements(), False)
+        builder.replace(":functions:",      [NodeWrap(w.getDeclaration())     for w in self.fundefs])
+        builder.replace(":generators:",     [NodeWrap(w.getDeclaration())     for w in generators])
+        builder.replace(":initStates:",     [NodeWrap(w.getDeclaration())     for w in self.states])
+        builder.replace(":restoreValues:",  [NodeWrap(w.getStateValue())      for w in self.states])
+        builder.replace(":update:",         [NodeWrap(w.getUpdateStatement()) for w in self.states])
+        
+        builder.replace(":initial:",  self.segments.initial.getItems())
+        builder.replace(":dynamic:",  self.segments.dynamic.getItems())
+        builder.replace(":terminal:", self.segments.terminal.getItems())
         
         builder.write(file)
 
         
-    def saveListFile(self, toFile = True):
-        self.loader.saveList(None if toFile else sys.stdout)
+    def writeListFile(self, file = None, summary = False):
+        def write(f):
+            Lister().report(self.loader.getSource(), file = f, onlyMarkedLines = summary)
+            print("%8d error(s)\n%8d warning(s)" % Lister().count(), file = f)
+            
+        if file is None:
+            path = self.loader.getFilepath(".lst")
+            with path.open("w") as f:
+                write(f)
+        else:
+            write(file)
+        
+        
+    def writeCurrentSource(self, extension = None):
+        if extension is None:
+            file = sys.stdout
+        else:
+            file = self.loader.getFilepath(extension).open("w")
+            
+        def output(label, items):
+            print("\n"+'-'*10, label, '-'*20, file=file)
+            for item in items:
+                print(item, file=file)
+                
+        generators  = itertools.chain.from_iterable([f.clients for f in self.fundefs])
+        output("functions",      [NodeWrap(w.getDeclaration())     for w in self.fundefs])
+        output("generators",     [NodeWrap(w.getDeclaration())     for w in generators])
+        output("initStates",     [NodeWrap(w.getDeclaration())     for w in self.states])
+        output("constants",      self.consts)
+        output("parameters",     self.params)
+        output("systemParams",   self.init)
+
+        output("initial",  self.segments.initial.getItems())
+        output("incons",         self.incons)
+        
+        output("restoreValues",  [NodeWrap(w.getStateValue())      for w in self.states])
+        output("dynamic",  self.segments.dynamic.getItems())
+        output("update",         [NodeWrap(w.getUpdateStatement()) for w in self.states])
+        
+        output("terminal", self.segments.terminal.getItems())
+
         
         
     def _getConstantValues(self):
@@ -228,9 +270,9 @@ class Precompiler:
         :return: dict
         '''
         constants = {
-                     ":constants:":      [w.statement for w in self.consts],
-                     ":parameters:":     [w.statement for w in self.params],
-                     ":incons:":         [w.statement for w in self.incons],
+                     ":constants:":      [w for w in self.consts],
+                     ":parameters:":     self.params,
+                     ":incons:":         [w for w in self.incons],
                      }
         template = "def dummy(): ...\n" + "\n".join(["'%s'" % c for c in constants])
         builder  = TemplateBuilder(template)
@@ -259,7 +301,7 @@ class Precompiler:
         for values in itertools.zip_longest(*items, fillvalue = " "*25):
             print(*values, file = file)
             
-        self.loader.saveList(file, summary = True)
+        self.writeListFile(file, summary = True)
         
             
     def debugSegmentation(self):
@@ -269,13 +311,18 @@ class Precompiler:
             print("*** segmentation incomplete")
             
 if __name__ == '__main__':
+    
+
+        
+    
+    
     mdl = Precompiler()
     mdl.compile("../../models/test.csm.py")
     mdl.printSummary()
     # print("\n", '-'*80, '\n')
-    mdl.saveListFile(True)
+    # mdl.saveListFile(True)
     print("\n", '-'*80, '\n')
-    mdl.writeTemplate()
+    # mdl.writeTemplate()
     # mdl.debugSegmentation()
     # for o in sorted(NodeWrap.objects, key=lambda o: str(o)):
     #     print(o)    

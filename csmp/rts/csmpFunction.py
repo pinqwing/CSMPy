@@ -123,8 +123,11 @@ class Csmp_AfGen(Csmp_Method):
             super().warn(message + finalMessage)
         
 
-    
     def __call__(self, x):
+        return self.getValue(x)
+    
+    
+    def getValue(self, x):
         try:
             if not (self.x[0] <= x <= self.x[-1]):
                 self.warn(self.extrapolator.getMessage(x))
@@ -158,6 +161,10 @@ class Csmp_NlfGen(Csmp_AfGen):
 
 
     def __call__(self, x):
+        return self.getValue(x)
+    
+    
+    def getValue(self, x):
         try:
             if not (self.x[0] <= x <= self.x[-1]):
                 self.warn(self.extrapolator.getMessage(x))

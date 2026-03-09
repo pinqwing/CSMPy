@@ -222,46 +222,25 @@ class MacroExpansionCollector(NodeCollector):
 
 if __name__ == '__main__':
     source = '''
-MACRO(
-        """
-        TWT, LAI = GROWTH(TWTI,MC,CVF, LAR, ALU)
-        TWT      = INTGRL(TWTI,GTW)
-        GTW      = (GPHOT - MC*TWT)*CVF
-        GPHOT    = ALU*AVIS
-        AVIS     = IVIS*(1.- EXP(- 0.7*LAIT))*0.9*LAI/LAIT
-        LAI      = TWT*LAR
-        """)
-        
-TWT1, LAI1 = GROWTH(TWTI1,MC,CVF, LAR, ALU)        
-TWT2, LAI2 = GROWTH(TWTI2,MC,CVF, LAR, ALU)        
+MACRO("""
+    X, DXDT  = EXPONENTIAL(X0, A, B)
+    X        = INTGRL(X0, DXDT)
+    RATE     = A * (X - B)
+    DXDT     = RATE
+    """)
+
+EX1, R1 = EXPONENTIAL(10., 0.1, 5) 
     '''
 
     Lister().start()
     Lister().addInfo("final message", Lister.FINAL, "me")
     tree = ast.parse(source)
-    r = MacroDeclarationCollector().run(tree)
-    print(r)
-    if not True:
-        growth = r[0]
-        print(growth.name, growth.outputs, growth.inputs)
-        Lister().report(growth.source, reportAll=True)
-        
-        source = "out1, out2 = GROWTH(p1, 2*p2, int(p3), 4, 5+6)"
-        
-        tree = ast.parse(source)
-        
-        i = MacroInjectorWrap(tree.body[0])
-        print(i, i.outputs, i.inputs, "\n\n\n")
-        i.injection(r[0])
-        
-    else:
-        d = dict([(m.name, m) for m in r])
-        print(d)
-        s = MacroExpansionCollector().run(tree, d)
-        print(s)
 
-        print(ast.unparse(tree))
-        
-        
-    for o in sorted(NodeWrap.objects, key=lambda o: str(o)):
-        print(o)    
+    macros = MacroDeclarationCollector().run(tree)
+    macros = dict([(m.name, m) for m in macros])
+    MacroExpansionCollector().run(tree, macros)
+    
+    print("macro definition:\n-----------------")
+    print(ast.unparse(macros["EXPONENTIAL"].code), "\n\n")
+    print("resulting code:\n---------------")
+    print(ast.unparse(tree))
