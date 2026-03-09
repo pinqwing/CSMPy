@@ -179,7 +179,7 @@ class LabelDecl(NodeWrap):
         
         
         
-class CSMPWrap(NodeWrap):
+class CSMPKeywordWrap(NodeWrap):
     def __init__(self, node: ast.AST, status = 0, varlist = False, name = "keyword", translation = "", **moreArgs):
         super().__init__(node)
         self.status     = status
@@ -208,6 +208,9 @@ class CSMPWrap(NodeWrap):
             s = "self.set%s(%s)" % (node.value.func.id.capitalize(),
                                     ",".join(['"%s"' % arg.id for arg in node.value.args]))
             return ast.parse(s)
+        elif self.translation:
+            node.value.func.id = self.translation
+            return node
         else:
             node.value.func.id = "self.set" + node.value.func.id.capitalize()
             return node

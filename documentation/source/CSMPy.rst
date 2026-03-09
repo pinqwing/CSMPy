@@ -95,7 +95,20 @@ Initial constants get their value after the CONSTANTs and PARAMS. Therefore, the
     
 FUNCTION
 --------
-As to date, FUNCTION has not yet been implemented.
+*CSMP::
+
+    FUNCTION REDFT=0.,1.,0.2,1.,0.25,0.,0.5,0
+    
+*CSMPy::
+
+    REDFT = FUNCTION(0., 1., 0.2, 1., 0.25, 0., 0.5, 0)
+    REDFT = FUNCTION((0., 1.), (0.2, 1.), (0.25, 0.), (0.5, 0))
+    
+FUNCTION defines a data table that is used by AFGEN and NLFGEN functions::
+
+    REDF = AFGEN(REDFT, RESL)
+    
+    
 
 OVERLAY
 --------

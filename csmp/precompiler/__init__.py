@@ -12,7 +12,7 @@ from csmp.precompiler.lister import Lister
 from csmp.precompiler.loader import ModelLoader
 from csmp.precompiler.nodeCollector import ImportCollector, ConstantCollector, \
     VarlistCollector, IntegralCollector, FundefCollector
-from csmp.precompiler.nodeWraps import CSMPWrap, NodeWrap, FunctionGeneratorWrap
+from csmp.precompiler.nodeWraps import CSMPKeywordWrap, NodeWrap, FunctionGeneratorWrap
 from csmp.precompiler.segment import ModelSegments, SegmentLabel
 from csmp.precompiler.sorter import Sorter
 from csmp.precompiler.template import TemplateBuilder
@@ -127,9 +127,9 @@ class Precompiler:
             info = {}
 
         if info:
-            wrap = CSMPWrap(node, **info) 
+            wrap = CSMPKeywordWrap(node, **info) 
             return wrap if wrap.status >= 0 else None
-            # return CSMPWrap(node, **info) if info.get('status', -999) >= 0 else None
+            # return CSMPKeywordWrap(node, **info) if info.get('status', -999) >= 0 else None
         elif (isinstance(node, ast.Assign) and 
               isinstance(node.value, ast.Call) and 
               node.value.func.id in ("AFGEN", "NLFGEN")):

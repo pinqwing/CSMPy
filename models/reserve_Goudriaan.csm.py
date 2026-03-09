@@ -20,7 +20,9 @@ GPHOT   = GPHST*(1.- EXP(-0.7 * LAI))
 REDF    = AFGEN(REDFT, RESL)
 LAI     = AMIN1(WSH / 500., 5.)
 WSH     = 0.7 * TWT
-REDFT   = FUNCTION(0.,1.,0.2,1.,0.25,0.,0.5,0.)
+REDFT   = FUNCTION((0., 1.), (0.2, 1.), (0.25, 0.), (0.5, 0))
+FINISH(RES > 450.)
+
 GPHST   = PARAM(400.)
-TIMER(FINTIM= 20., PRDEL= 1., )
+TIMER(FINTIM= 20., PRDEL= 1., DELT = 0.01) # added small delt because sofar we only have RECT
 PRINT(RES, RESL,GPHRED)

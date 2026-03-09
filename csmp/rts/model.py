@@ -1,7 +1,15 @@
 from abc import ABC, abstractmethod
 import sys
 from csmp.rts.csmpFunction import Csmp_Function, Csmp_AfGen, Csmp_NlfGen
-        
+from csmp.customTypes import Comparator
+import inspect
+import ast
+from itertools import zip_longest
+
+class NormalFinish(StopIteration):
+    def __init__(self, reason):
+        super().__init__(f"$$$ Simulation halted for finish condition {reason}")
+                
 class StateVariable:
     
     def __init__(self, name, initialValue):        
@@ -27,6 +35,20 @@ class Rect(Integrator):
         if delt > 0:
             self.delta = delt
     
+# class EndCondition:
+#
+#     def __init__(self, varName, varValue, operator):
+#         self.varName    = varName
+#         self.tstValue   = varValue
+#         self.text       = f"{varName} {operator} {varValue}"
+#         self.comparator = lambda v: Comparator[operator](v, varValue)
+#
+#
+#     def __call__(self, value):
+#         if self.comparator(value):
+#             return True, self.text
+#         return False, None
+     
 
 
 class Printer:
@@ -112,7 +134,8 @@ class CSMP_Model(ABC):
         self.stateNames     = {} # by name
         self.integrator     = Rect()
         self.printer        = Printer()
-    
+        self.finished       = False
+        
                 
     def _addElement(self, element, itemDict, elementCatName, index = None, name = None):
         def doAdd(dictIndex):
@@ -160,6 +183,9 @@ class CSMP_Model(ABC):
         try:
             self.timer.changeParameters(**params)
             self.integrator.setDeltaTime(params.get("DELT", -1))
+            # self.endConditions.append(EndCondition("time", 
+            #                                        self.timer.finTim, 
+            #                                        ">="))
         except RuntimeError as rte:
             rte.args = ("%s in setTimer() (%s)" % rte.args,)
             raise 
@@ -179,6 +205,43 @@ class CSMP_Model(ABC):
     
     def setTitle(self, title):
         self.title = title
+    
+
+    def checkEndConditions(self, *args):
+        
+        def unIndent(lines):
+            ldsp  = 0xff                # number of leading spaces
+            for line in lines:
+                if not line.strip():    
+                    continue            # skip no-code lines
+                ldsp = min(ldsp, len(line) - len(line.lstrip(" ")))
+                if ldsp == 0:           
+                    return lines    # code block not indented
+            
+            return [line[ldsp:] for line in lines]
+        
+        def getArgSource():
+            frame = inspect.currentframe().f_back.f_back
+            try:
+                src, start  = inspect.getsourcelines(frame)
+                target      = frame.f_lineno - start + 1     # = relative line nr
+                tree        = ast.parse("".join(unIndent(src)))
+                
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Call) and node.lineno == target:
+                        return [ast.unparse(arg) for arg in node.args]
+                else:
+                    return ["not found!"]
+            except Exception as e:
+                return [str(e)]
+            
+        if any(args):
+            aSrc = getArgSource()
+            # get call argument for flagged end condition:
+            matches = [s for a, s in zip_longest(args, aSrc, fillvalue = "??)") if a]
+            self.finished = ", ".join(matches)
+
+    
     
     @abstractmethod
     def defineConstants(self):      return {}

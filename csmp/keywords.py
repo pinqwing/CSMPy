@@ -126,7 +126,7 @@ class CSMP_Function:
     @classmethod
     def getFinish(cls):
         # FINISH(**conditions)
-        return dict(status = cls.toINIT, varlist = False)
+        return dict(status = cls.OK, varlist = False, translation = "self.checkEndConditions")
 
     @classmethod
     def getRelerr(cls):
