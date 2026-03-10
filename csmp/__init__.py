@@ -6,4 +6,4 @@ from csmp.functions import ABS, AFGEN, ALOG, ALOG10, AMAX0, AMAX1, AMIN0, AMIN1,
     RNDGEN, RST, SIN, SINE, SQRT, STEP, TANH, ZHOLD
 
 from csmp.rts.linearExtrapolators import Clip, LastSegment, Regression
-from csmp.rts.model import CSMP_Model
+from csmp.rts import CSMP_Model
