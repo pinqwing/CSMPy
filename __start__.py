@@ -6,7 +6,7 @@ if __name__ == '__main__':
     from csmp.precompiler.nodeWraps import NodeWrap
             
     mdl = Precompiler()
-    mdl.compile("./models/integration_test.csm.py")
+    mdl.compile("./models/RK4_test.csm.py")
     mdl.printSummary()
     # print("\n", '-'*80, '\n')
     mdl.writeListFile()

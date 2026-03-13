@@ -3,8 +3,9 @@ from abc import ABC, abstractmethod
 from itertools import zip_longest
 
 from csmp.rts.csmpFunction import Csmp_AfGen, Csmp_Function, Csmp_NlfGen
-from csmp.rts.model import Timer, Printer
+from csmp.rts.model import Printer
 from csmp.rts.integrator import Rect, StateVariable
+from csmp.rts.timer import Timer
 
 
 class NormalFinish(StopIteration):
@@ -34,7 +35,7 @@ class CSMP_Model(ABC):
     
     def __init__(self):
         self.title          = 'simulation'
-        self.timer          = Timer()
+        self.timer          = Timer(10.)
         self.globals        = {}
         self.functionBlocks = {} # by both index & name
         self.funcGenerators = {} # by both index & name
@@ -62,33 +63,40 @@ class CSMP_Model(ABC):
                    )
         
 
+    def printEvent(self):
+        prVars = dict([(name, self.getVariable(name)) for name in self.printer.varNames])
+        self.printer.print(self.timer.time, prVars)
+        
     def run(self):
         # self.endConditions.append(EndCondition("RES", 450, ">="))
         print(self.title)
         self.timer.start()
         self.printer.printHeader()
-        self.ratesEtc = self.loop(0)
+        self.ratesEtc.update(self.loop(0))
         
         try:
-            done = False
+            lastPrt = -1
+            lastOut = -1
             
             while True:
                 if self.timer.printRequired():
-                    prVars = dict([(name, self.getVariable(name)) for name in self.printer.varNames])
-                    self.printer.print(self.timer.time, prVars)
-                
+                    self.printEvent()
+                    lastPrt = self.timer.time
+
+                    
                 if self.finished:
                     raise NormalFinish(self.finished)
                 
-                self.integrator.run()
-
-                if done:                
+                if self.timer.simulationComplete():                
                     self.loop(self.timer.time)
                     raise NormalFinish(f"time >= {self.timer.finTim}")
                 
-                done = self.timer.time >= self.timer.finTim # but do one final cycle
+                self.integrator.run()
+                self.timer.next()
                 
         except NormalFinish as e:
+            if self.timer.time > lastPrt:
+                self.printEvent()
             print(e)
         
 
@@ -137,7 +145,7 @@ class CSMP_Model(ABC):
         
     def setTimer(self, **params):
         try:
-            self.timer.changeParameters(**params)
+            self.timer = Timer(**params)
         except RuntimeError as rte:
             rte.args = ("%s in setTimer() (%s)" % rte.args,)
             raise 

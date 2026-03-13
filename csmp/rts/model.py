@@ -46,7 +46,7 @@ class Printer:
     def print(self, time, values):
         def printVar(name):
             x = values.get(name, -99999)
-            print("{:>12.4f}".format(x), end = "")
+            print("{:>12.8f}".format(x), end = "")
             # print("%12g" % x, end = "")
         
         print("{:>8.4E}".format(time), end = "")
@@ -58,45 +58,3 @@ class Printer:
     
             
 
-class Timer:
-    
-    def __init__(self, time = 0.0, delt = 1.0, finTim = 10.0, prDel = 1.0, outDel = 1.0):
-        self.time   = time
-        self.delt   = delt
-        self.finTim = finTim
-        self.prDel  = prDel
-        self.outDel = outDel
-        
-        
-    def changeParameters(self, **params):
-        attribs = [name for name in dir(self) if not name.startswith("_")]
-        lattrib = [name.lower() for name in attribs]
-        try:
-            for name, value in params.items():
-                i     = lattrib.index(name.lower())
-                vName = attribs[i]
-                setattr(self, vName, value)
-        except ValueError:
-            raise RuntimeError("unknown argument", name)
-        
-        
-    def start(self):
-        self.time = 0.0
-        self._outTimes = [i * self.outDel for i in range(round(self.finTim/self.outDel + 2))]
-        self._prnTimes = [i * self.prDel  for i in range(round(self.finTim/self.prDel  + 2))]
-        
-        
-    def printRequired(self):
-        return self.time >= self._prnTimes[0]
-    
-    
-    def setTimeStep(self):
-        while self._prnTimes[0] <= self.time:
-            self._prnTimes.pop(0)
-            
-        self.time += self.delt
-        return self.time < self.finTim
-    
-
-
-    
