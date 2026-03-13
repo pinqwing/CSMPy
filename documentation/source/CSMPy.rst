@@ -175,10 +175,10 @@ relative error.
 keyword                                     status
 ======================================== ========================================
 TIMER       DELT=.02, FINTIM=10.0           partly implemented
-FINISH      ALT=0.0, X=5000.0, X=Y
+FINISH      ALT=0.0, X=5000.0, X=Y          implemented
 RELERR      XDOT=5.0E-5, X=1.5E-4
 ABSERR      X2DOT=4.0E-3
-METHOD      MILNE    
+METHOD      MILNE                            a number of methods are operational
 ======================================== ========================================
     
     
@@ -202,8 +202,8 @@ items as the variables to be printed and/or print-plotted.
 ======================================== ========================================
 keyword                                     status
 ======================================== ========================================
-PRINT       X, XDOT, ALT                    partly implemented
-TITLE       PROBLEM DESCRIPTION             partly implemented
+PRINT       X, XDOT, ALT                    implemented
+TITLE       PROBLEM DESCRIPTION             implemented
 PREPARE     DIST, VELOC
 PRTPLOT     X(YI,Y2), Z(3.0, 4.0, Y3), W    * undecided *
 LABEL       PRINT PLOT PAGE HEADING
@@ -222,3 +222,4 @@ PRTPLOT(...)
 LABEL("PRINT PLOT PAGE HEADING")
 RANGE(ALT, DIST)
 ======================================== ========================================
+
