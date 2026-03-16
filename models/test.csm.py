@@ -11,37 +11,42 @@ MACRO("""
     RATE     = A * (X - B)
     DXDT     = RATE
     """)
+
 # --- INITIAL ---"
 T = 0 # t to test initial segment
-# --- DYNAMIC ---   
+
+# --- DYNAMIC ---    
 TWT     = WSH + WRT
 WSH     = INTGRL(WSHI, GSH)
 WRT     = INTGRL(WRTI, GRT)
 WSHI    = INCON(50.)
 WRTI    = INCON(50.)
 GSH     = 0.7 * GTW
+# COMMENTAAR
 GRT     = 0.3 * GTW
 GTW     = (GPHOT - MAINT) * CVF
 MAINT   = (WSH + WRT) * 0.015
 GPHOT   = GPHST * (1. - EXP(-0.7 * LAI))
 LAI     = AMIN1(WSH / 500.,  5.)
-EX1, R1 = EXPONENTIAL(10., 0.1, 5) # test macro
-EX2, R2 = EXPONENTIAL(WRTI, CVF, GPHST / 5.) # test macro
+EX1, R1 = EXPONENTIAL(10., 0.1, 5) 
+EX2, R2 = EXPONENTIAL(WRTI, CVF, GPHST / 5.) 
 REDFT   = FUNCTION(0.,1.,0.2,1.,0.25,0.,0.5,0.)
 REDFT1   = FUNCTION(0.,1.,0.2,1.,0.25,0.,0.5,0.)
 REDFT2   = FUNCTION(0.,1.,0.2,1.,0.25,0.,0.5,0.)
 REDF    = AFGEN(REDFT,LAI*4 - R1, extra=Clip)
-REDF2    = AFGEN(REDFT,LAI*4 - R1, extra=Clip)
-REDF2    = AFGEN(REDFT,LAI*4 - R1, extra=Clip)
+REDF2    = AFGEN(REDFT2,LAI*4 - R1, extra=Clip)
+REDF2    = AFGEN(REDFT1,LAI*4 - R1, extra=Clip)
 rgr      = PARAM(0.123)
+
 PARAM(
     CVF = 0.7, 
     GPHST = 400.,
-    PPI = PI    # test param depeding on constant
+    PPI = PI    
     )
+
 CONSTANT(
     PI = 3.141592,
-    PI2 = 2 * PI,   # test of dependent constant
+    PI2 = 2 * PI,
     )      
 
 TIMER(FINTIM = 100., DELT = 1., PRDEL = 5., OUTDEL = 5.)

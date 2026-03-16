@@ -6,6 +6,73 @@ from ..customTypes import VarType
 from .nodeWraps import NodeWrap, IntegralDecl, ConstantDecl, LabelDecl
 from .segment import SegmentLabel
 from csmp.precompiler.nodeWraps import FunctionDecl
+from csmp.precompiler.keywordsBase import Keyword
+from csmp import errors
+from csmp.precompiler.keywords import ConstantDeclaration
+
+
+
+
+
+class KeywordCollector(ast.NodeTransformer):
+    
+    def __init__(self):
+        super().__init__()
+        self.keywords = []
+    
+    def run(self, tree):
+        self.visit(tree)
+        return self.keywords
+        
+            
+    def addKeyword(self, keyword: Keyword):
+        self.keywords.append(keyword)
+        return keyword
+    
+    
+    def getTargetName(self, node):
+        if not ("targets" in node._fields):
+            raise errors.PrecompilerError("syntax not understood")
+        if not isinstance(node.targets[0], ast.Name):
+            raise errors.PrecompilerError("cannot unpack CSMP-statement")
+        return node.targets[0].id
+    
+
+    def match(self, node):    
+        if ("value" in node._fields) and isinstance(node.value, ast.Call):
+            keywordClass = Keyword[node.value.func.id]
+            return keywordClass
+
+    
+    def compoundKeyword(self, keyword, node):
+        # compound constants cannot be sorted.
+        # best to split them right away:
+        for kwd in node.value.keywords:
+            name    = kwd.arg
+            value   = ast.unparse(kwd.value) 
+            subnode = keyword._nodeFromString(f"{name} = {keyword.className()}({value})")
+            self.addKeyword(type(keyword)(subnode, name))
+            
+            
+    def visit_Expr(self, node):
+        keywordClass = self.match(node)
+        if keywordClass is not None:
+            keyword = keywordClass(node)
+            if isinstance(keyword, ConstantDeclaration):
+                self.compoundKeyword(keyword, node)
+            else:
+                self.addKeyword(keyword)
+            return keyword.inplace()
+        return node
+        
+
+    def visit_Assign(self, node):
+        keywordClass = self.match(node)
+        if keywordClass is not None:
+            name = self.getTargetName(node)
+            keyword = self.addKeyword(keywordClass(node, name))
+            return keyword.inplace()
+        return node
 
 
 class NodeCollector(ast.NodeTransformer):
@@ -45,137 +112,3 @@ class ImportCollector(NodeCollector):
         return self.accept(node)
 
 
-class DeclarationCollector(NodeCollector):
-
-    def __init__(self):
-        super().__init__()
-        self.originator = type(self).__name__
-        
-        
-    def checkMultipleDefinitions(self, items):
-        itemDict = defaultdict(list)
-        for item in items: 
-            itemDict[item.name].append(item)
-        if len(itemDict) < len(items):
-            for name, wraps in itemDict.items():
-                if len(wraps) > 1:
-                    for item in wraps[1:]:
-                        item.addRemark("redefinition of immutable variable '%s'" % name, originator = self.originator)
-
-                        
-    def run(self, tree):
-        self.visit_Assign = self._processNode_
-        items = super().run(tree)
-        self.checkMultipleDefinitions(items)
-        return items 
-    
-    
-class FundefCollector(DeclarationCollector):        
-    ''' function declaration collector
-    
-    Collects FUNCTION-statements.
-    
-    note:
-        AFGEN & NLFGEN are not pre-collected by any Collector.
-        Instead, they are dealt with like with any csmp-statement,
-        only the FunctionGeneratorWraps make themselves known
-        to their FunctionDecl-s so they can hitch hike along
-        to get their declaration lines inserted.
-    '''
-    wrapperClass = FunctionDecl
-    
-    def run(self, tree):
-        self.originator = "functionDeclarationCheck"
-        return super().run(tree)
-    
-    @staticmethod
-    def matches(node):    
-        return isinstance(node.value, ast.Call) and node.value.func.id == "FUNCTION"
-    
-    
-    def _processNode_(self, node):
-        if self.matches(node):
-            return self.accept(node)
-        return node
-
-
-        
-class IntegralCollector(DeclarationCollector):        
-    wrapperClass = IntegralDecl
-    
-    def run(self, tree):
-        self.originator = "stateVarCheck"
-        return super().run(tree)
-    
-    @staticmethod
-    def matches(node):    
-        return isinstance(node.value, ast.Call) and node.value.func.id == "INTGRL"
-    
-    
-    def _processNode_(self, node):
-        if self.matches(node):
-            return self.accept(node)
-        return node
-
-
-        
-class SectionCollector(NodeCollector):        
-    wrapperClass = LabelDecl
-    
-    def run(self, tree):
-        self.visit_Expr = self._processNode_
-        return super().run(tree)
-    
-    
-    def _processNode_(self, node):
-        if isinstance(node.value, ast.Constant) and node.value.value in dir(SegmentLabel):
-            return self.accept(node)
-        return node
-
-
-        
-class ConstantCollector(DeclarationCollector):        
-    '''
-    collects constant declarations in the format NAME = VVVVV(<value>)
-    where VVVVV is one of CONSTANT, PARAM or INCON.
-    '''
-    wrapperClass = ConstantDecl
-    
-    def run(self, tree, varType: VarType):
-        self.varType    = varType
-        self.originator = "%sCheck" % varType.name.capitalize()
-        return super().run(tree)
-    
-    
-    def _processNode_(self, node):
-        if isinstance(node.value, ast.Call) and node.value.func.id == self.varType.name:
-            # cut the middle man (func):
-            node.value = node.value.args[0] # for now, only 1-element constants allowed
-            return self.accept(node, varType = self.varType)
-        return node
-
-
-        
-class VarlistCollector(NodeCollector):
-    '''
-    collects constant declarations in the format VVVVV(NAME = <value>, ...)
-    where VVVVV is one of CONSTANT, PARAM or INCON.
-    '''
-    wrapperClass = ConstantDecl
-    
-    def run(self, tree, varType: VarType):
-        self.varType        = varType
-        self.visit_Expr     = self._processNode_
-        items = super().run(tree)
-        return items 
-    
-    def _processNode_(self, node):
-        if isinstance(node.value, ast.Call) and node.value.func.id == self.varType.name:
-            s = "\n".join([ast.unparse(k) for k in node.value.keywords])
-            for n in ast.parse(s).body:
-                self.accept(n, varType = self.varType, lines = (node.lineno, node.end_lineno))
-            return None
-        return node
-    
-    
-    

@@ -1,23 +1,24 @@
-import lib.ast_comments as ast
-import inspect
-import itertools
 import sys
+import itertools
 import importlib.util
+from collections import defaultdict
 from pathlib import Path
+
+import lib.ast_comments as ast
+from lib.smallUtilities import flatten, dump
 
 from csmp.customTypes import VarType
 from csmp.errors import PrecompilerError, SegmentationError
 from csmp.keywords import CSMP_Function
 from csmp.precompiler.lister import Lister, WARNING
 from csmp.precompiler.loader import ModelLoader
-from csmp.precompiler.nodeCollector import ImportCollector, ConstantCollector, \
-    VarlistCollector, IntegralCollector, FundefCollector
+from csmp.precompiler.nodeCollector import ImportCollector, KeywordCollector
 from csmp.precompiler.nodeWraps import CSMPKeywordWrap, NodeWrap, FunctionGeneratorWrap
 from csmp.precompiler.segment import ModelSegments, SegmentLabel
 from csmp.precompiler.sorter import Sorter
 from csmp.precompiler.template import TemplateBuilder
-from csmp.precompiler.macros import MacroDeclarationCollector,\
-    MacroExpansionCollector
+from csmp.precompiler.keywordsBase import KeywordLabels
+from csmp.precompiler.macros import MacroSubstituter
 from templates.simulationModelTemplate import SimulationModelTemplate
 
 
@@ -28,6 +29,13 @@ class Precompiler:
         self.options  = options
         self.template = SimulationModelTemplate
         self.reset()
+
+    
+    consts  = property(lambda p: p.keywordNodes[KeywordLabels.constants])
+    params  = property(lambda p: p.keywordNodes[KeywordLabels.parameters])
+    incons  = property(lambda p: p.keywordNodes[KeywordLabels.incons])
+    states  = property(lambda p: p.keywordNodes[KeywordLabels.initStates])
+    fundefs = property(lambda p: p.keywordNodes[KeywordLabels.functions])
         
         
     def compile(self, sourceFile):
@@ -36,23 +44,18 @@ class Precompiler:
         self.processCode()
         self.results    = Lister().count()
         self.succes     = (self.results[0] == 0)
-        self._writeOutput()
         
         
     def reset(self):
         Lister().start()
-        self.ast        = ast.parse("")
-        self.succes     = False
-        self.results    = 99999, 99999
-        self.consts     = []
-        self.imports    = []
-        self.incons     = []
-        self.init       = []
-        self.macros     = []
-        self.params     = []
-        self.segments   = []
-        self.states     = []
-        self.fundefs    = []
+        self.ast            = ast.parse("")
+        self.succes         = False
+        self.results        = 99999, 99999
+        self.readOnly       = {}
+        self.imports        = []
+        self.init           = []
+        self.segments       = ModelSegments(ast.parse("#"))
+        self.keywordNodes   = defaultdict(list)
         
 
     def processCode(self):
@@ -63,133 +66,107 @@ class Precompiler:
             return
         
         try:
-            self._macroExpansion()
-            self._collectDeclarations()
-            self._modelSegmentation()
-            self._assignStatements()
+            self.macroExpansion()
+            self.collectDeclarations()
+            self.modelSegmentation()
+            self.assignStatements()
             self.writeCurrentSource(sorted = False)
-            self._sortCodeBlocks()
+            self.sort()
             self.writeCurrentSource(sorted = True)
+            return True
         except PrecompilerError:
             Lister().addError("parsing of the source code failed", Lister.FINAL, "processCode")
-    
+            return False
+
     
     @Lister.withContextError
-    def _macroExpansion(self):
-        self.macros = MacroDeclarationCollector().run(self.ast)
-        macros = dict([(m.name, m) for m in self.macros])
-        MacroExpansionCollector().run(self.ast, macros)
+    def macroExpansion(self):
+        MacroSubstituter().run(self.ast)
         
         
     @Lister.withContextError
-    def _modelSegmentation(self):
+    def modelSegmentation(self):
         self.segments = ModelSegments(self.ast)
     
             
     @Lister.withContextError
-    def _collectDeclarations(self):
-        names = {}
+    def collectDeclarations(self):
         
-        def addDeclarations(source, destination):
+        def addReadOnly(source):
             for decl in source:
                 name = decl.name
-                vTyp = decl.varType
-                peer = names.get(name, False)
+                peer = self.readOnly.get(name, False)
                 if peer:
-                    tail = "not allowed" if (vTyp == peer) else "conflicts with %s '%s'" % (peer.name, name)
-                    decl.addRemark("redefinition of %s '%s' %s" % (vTyp.name, name, tail))
+                    tail = f"conflicts with {peer.className()} '{peer.name}'"
+                    decl.addRemark(f"redefinition of {decl.className()} '{name}' {tail}" )
                 else:
-                    names[name] = vTyp
-                    destination.append(decl)
+                    self.readOnly[name] = decl
                      
         self.imports = ImportCollector().run(self.ast)
-        
-        # order matters below
-        addDeclarations(IntegralCollector().run(self.ast), self.states)
-        addDeclarations(FundefCollector().run(self.ast), self.fundefs)
-        addDeclarations(ConstantCollector().run(self.ast, VarType.CONSTANT), self.consts)
-        addDeclarations(VarlistCollector().run(self.ast, VarType.CONSTANT), self.consts)
-        addDeclarations(ConstantCollector().run(self.ast, VarType.PARAM), self.params)
-        addDeclarations(VarlistCollector().run(self.ast, VarType.PARAM), self.params)
-        addDeclarations(ConstantCollector().run(self.ast, VarType.INCON), self.incons)
-        addDeclarations(VarlistCollector().run(self.ast, VarType.INCON), self.incons)
-        
-        self.readOnly= dict([(wrap.name, wrap.varType)
-                            for wrap in self.consts 
-                                      + self.incons 
-                                      + self.params
-                                      + self.states])
-        
-    
-    def _wrapNode(self, node):
-        if isinstance(node.value, ast.Name):
-            info = CSMP_Function.keywordInfo(node.value.id)
-        elif isinstance(node.value, ast.Call):
-            info = CSMP_Function.keywordInfo(node.value.func.id)
-        else:
-            info = {}
+        allKwdNodes  = KeywordCollector().run(self.ast)
+            
+        for node in allKwdNodes:
+            for cat in node.categories:
+                self.keywordNodes[cat].append(node)
+                
+        addReadOnly(self.keywordNodes[KeywordLabels.initStates])
+        addReadOnly(self.keywordNodes[KeywordLabels.constants])
+        addReadOnly(self.keywordNodes[KeywordLabels.parameters])
+        addReadOnly(self.keywordNodes[KeywordLabels.incons])
+        addReadOnly(self.keywordNodes[KeywordLabels.functions])
 
-        if info:
-            wrap = CSMPKeywordWrap(node, **info) 
-            return wrap if wrap.status >= 0 else None
-            # return CSMPKeywordWrap(node, **info) if info.get('status', -999) >= 0 else None
-        elif (isinstance(node, ast.Assign) and 
-              isinstance(node.value, ast.Call) and 
-              node.value.func.id in ("AFGEN", "NLFGEN")):
-            return FunctionGeneratorWrap(node, self.fundefs)
-        else:   
-            return NodeWrap(node)
-    
+        functions = dict([(f.name, f.index) for f in self.keywordNodes[KeywordLabels.functions]])
+        for gen in self.keywordNodes[KeywordLabels.generators]:
+            gen.link(functions)
         
+    
     def _validateStatement(self, statement):
-        constants = (VarType.PARAM, VarType.INCON, VarType.CONSTANT)
         node = statement.node
         if isinstance(node, ast.Assign):
             for n in ast.walk(node.targets[0]):
                 if isinstance(n, ast.Name): 
-                    varType = self.readOnly.get(n.id, -1)
-                    if varType in constants:
-                        statement.addRemark("'%s' is immutable while it has been declared %s" % (n.id, varType.name), 
-                                            originator = "validate")
-                    elif (varType == VarType.INTGRL) and not IntegralCollector.matches(node):
-                        statement.addRemark("'%s' is immutable while it has been declared %s" % (n.id, "INTGRL"), 
+                    keyword = self.readOnly.get(n.id, False)
+                    if keyword:
+                        statement.addRemark(f"'{n.id}' is immutable while it has been declared {keyword.className()}", 
                                             originator = "validate")
                  
                     
     @Lister.withContextError
-    def _assignStatements(self):
+    def assignStatements(self):
         for node in self.ast.body:
-            statement = self._wrapNode(node)
-            if statement is None: 
-                continue # ignore this one
-            line    = statement.getLineNumber()
-            if line < 0:
-                self.init.append(statement)
-            else:
-                for segment in self.segments:
-                    if segment.contains(line): 
-                        segment.appendStatement(statement)
-                        self._validateStatement(statement)
-                        break
-                else: # if not assigned ...
+            statement = NodeWrap(node)
+            line      = statement.getLineNumber()
+            for segment in self.segments:
+                if segment.contains(line):
+                    if isinstance(node, ast.Comment):
+                        dump(node)
+                    segment.appendStatement(statement)
+                    self._validateStatement(statement)
+                    break
+            else: # if not assigned ...
+                if line < self.segments.initial.start:
+                    self.init.append(statement)
+                else:
                     statement.addRemark("spurious line", WARNING)
-                    # raise SegmentationError("line %d could not be assigend to a model segment" % line)
+                    raise SegmentationError("line %d could not be assigend to a model segment" % line)
 
 
     @Lister.withContextError
-    def _sortCodeBlocks(self):
+    def sort(self):
+        consts, params, incons, states, fundefs = [self.keywordNodes[l]for l in (
+                                                    KeywordLabels.constants, KeywordLabels.parameters,
+                                                    KeywordLabels.incons,    KeywordLabels.initStates,
+                                                    KeywordLabels.functions)] 
+        
         codeSorter  = Sorter()
         codeSorter.useImports(self.imports)
-        codeSorter.sort(self.consts, blockID = "sorter: constant section")
-        codeSorter.sort(self.params, blockID = "sorter: parameter section")
-        codeSorter.sort(self.incons, blockID = "sorter: initial constants")
+        codeSorter.sort(consts, blockID = "sorter: constant section")
+        codeSorter.sort(params, blockID = "sorter: parameter section")
+        codeSorter.sort(incons, blockID = "sorter: initial constants")
          
-        for s in self.states:
-            codeSorter.addSymbol(s.name)
-                
-        for s in self.fundefs:
-            codeSorter.addSymbol(s.name)
-                
+        for s in states:    codeSorter.addSymbol(s.name)                
+        for s in fundefs:   codeSorter.addSymbol(s.name)
+        
         for segment in self.segments:
             segment.sort(codeSorter)
             
@@ -211,34 +188,29 @@ class Precompiler:
             
             
     @Lister.withContextError
-    def writeTemplate(self, file = sys.stdout):
+    def writeTemplate(self, file = sys.stdout, template = SimulationModelTemplate, builder = None):
         
         def common():
             variables = self.segments[SegmentLabel.INITIAL].getAssignments()
             s = "global %s" % ", ".join(variables) if variables else "# (nothing to do)" 
             node = ast.parse(s)
-            return [NodeWrap(node.body[0])] if node.body else []
+            return [node.body[0]] if node.body else []
 
-        generators  = itertools.chain.from_iterable([f.clients for f in self.fundefs])
-        builder     = TemplateBuilder(self.template)
-        builder.replace(":commonBlock:", common())
+        builder     = TemplateBuilder(template) if builder is None else builder
+        builder.replace2(KeywordLabels.common, common())
 
-        builder.replace(":parameters:",     self.params, False)
-        builder.replace(":constants:",      self.consts, False)
-        builder.replace(":incons:",         self.incons)
-        builder.replace(":systemParams:",   self.init)
-        
-        builder.replace(":functions:",      [NodeWrap(w.getDeclaration())     for w in self.fundefs])
-        builder.replace(":generators:",     [NodeWrap(w.getDeclaration())     for w in generators])
-        builder.replace(":initStates:",     [NodeWrap(w.getDeclaration())     for w in self.states])
-        builder.replace(":restoreValues:",  [NodeWrap(w.getStateValue())      for w in self.states])
-        builder.replace(":update:",         [NodeWrap(w.getUpdateStatement()) for w in self.states])
-        
-        builder.replace(":initial:",  self.segments.initial.getItems())
-        builder.replace(":dynamic:",  self.segments.dynamic.getItems())
-        builder.replace(":terminal:", self.segments.terminal.getItems())
-        
+        builder.replace2(KeywordLabels.initial,    [w.node for w in self.segments.initial.getItems()],  False)
+        builder.replace2(KeywordLabels.dynamic,    [w.node for w in self.segments.dynamic.getItems()],  False)
+        builder.replace2(KeywordLabels.terminal,   [w.node for w in self.segments.terminal.getItems()], False)
+
+        for cat in KeywordLabels: # this loops through _all_ cats and destroys any remaining placeholders
+            items       = self.keywordNodes[cat]
+            transformed = flatten([item.transform(cat) for item in items])
+            builder.replace2(cat, transformed, True)
+
         builder.write(file)
+
+        
 
         
     def writeListFile(self, file = None, summary = False):
@@ -261,23 +233,28 @@ class Precompiler:
                 print("\n"+'-'*10, label, '-'*20, file=file)
                 for item in items:
                     print(item, file=file)
-    
-            generators  = itertools.chain.from_iterable([f.clients for f in self.fundefs])
-            output("functions",      [NodeWrap(w.getDeclaration())     for w in self.fundefs])
-            output("generators",     [NodeWrap(w.getDeclaration())     for w in generators])
-            output("initStates",     [NodeWrap(w.getDeclaration())     for w in self.states])
-            output("constants",      self.consts)
-            output("parameters",     self.params)
-            output("systemParams",   self.init)
-    
-            output("initial",        self.segments.initial.getItems())
-            output("incons",         self.incons)
-            
-            output("restoreValues",  [NodeWrap(w.getStateValue())      for w in self.states])
-            output("dynamic",  self.segments.dynamic.getItems())
-            output("update",         [NodeWrap(w.getUpdateStatement()) for w in self.states])
-            
-            output("terminal", self.segments.terminal.getItems())
+                
+            for lbl in [KeywordLabels.functions,
+                        KeywordLabels.generators,
+                        KeywordLabels.initStates,
+                        KeywordLabels.constants,
+                        KeywordLabels.parameters,
+                        KeywordLabels.systemParams,
+                        KeywordLabels.incons, 
+                        KeywordLabels.initial, 
+                        KeywordLabels.restoreValues,
+                        KeywordLabels.dynamic,
+                        KeywordLabels.update,
+                        KeywordLabels.terminal]:
+                if   lbl == KeywordLabels.initial:
+                    items = self.segments.initial.getItems()
+                elif lbl == KeywordLabels.dynamic:
+                    items = self.segments.dynamic.getItems()
+                elif lbl == KeywordLabels.terminal:
+                    items = self.segments.terminal.getItems()
+                else:
+                    items = [NodeWrap(w.transform(lbl)) for w in self.keywordNodes[lbl]]  
+                output(lbl.value, items)        
         
         if sorted:
             self._writeFile(writeSource,  self.options.sorted["scrn"],  self.options.sorted["file"], ".sorted")
@@ -290,20 +267,12 @@ class Precompiler:
         Evaluate the hard-defined values of constants, parameters and incons.
         :return: dict
         '''
-        constants = {
-                     ":constants:":      [w for w in self.consts],
-                     ":parameters:":     self.params,
-                     ":incons:":         [w for w in self.incons],
-                     }
-        template = "def dummy(): ...\n" + "\n".join(["'%s'" % c for c in constants])
-        builder  = TemplateBuilder(template)
-        for label, nodes in constants.items():
-            builder.replace(label, nodes)
-        
-        result  = {}
-        exec(builder.toString(), locals = result)
-        return result
-        
+        constants = self.consts + self.params + self.incons
+        tmpSource = "def dummy(): ...\n" + "\n".join([s.toString() for s in constants])
+        result    = {}
+        exec(tmpSource, locals = result)
+        return result 
+            
         
     def writeSummary(self, file = sys.stdout):
         modelFileName       = self.loader.file

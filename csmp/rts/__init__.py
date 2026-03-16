@@ -170,7 +170,7 @@ class CSMP_Model(ABC):
 
     def checkEndConditions(self, *args):
         
-        def unIndent(lines):
+        def _unindent(lines):
             ldsp  = 0xff                # number of leading spaces
             for line in lines:
                 if not line.strip():    
@@ -186,7 +186,7 @@ class CSMP_Model(ABC):
             try:
                 src, start  = inspect.getsourcelines(frame)
                 target      = frame.f_lineno - start + 1     # = relative line nr
-                tree        = ast.parse("".join(unIndent(src)))
+                tree        = ast.parse("".join(_unindent(src)))
                 
                 for node in ast.walk(tree):
                     if isinstance(node, ast.Call) and node.lineno == target:

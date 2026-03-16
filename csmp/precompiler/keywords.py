@@ -1,94 +1,147 @@
 # from csmp.customTypes import IntegrationMethod
-from enum import Enum
-from csmp.errors import PrecompilerError
-from _warnings import warn
-from unicodedata import category
+import lib.ast_comments as ast
+from lib.smallUtilities import dump
+
+
+from csmp.precompiler.keywordsBase import Keyword, KeywordStatus, KeywordLabels
+from csmp.precompiler.lister import Lister
 
 def symbols():
     return [n for n in globals() if n == n.upper() and not n.startswith("_") ]
 
 
-class KeywordStatus(Enum):
-    OK                  = 0
-    toINIT              = 1
-    IGNORED             =-2
-    NOT_YET_SUPPORTED   =-3
-    OBSOLETE            =-4
-    NOT_SUPPORTED       =-5
-    UNDECIDED           =-6
-    
-    def humanReadable(self):
-        return self.name.lower().replace("_", " ")
+
+# class KeywordAction(Enum):
+#     keep    = 0
+#     extract = 1
+#     modify  = 2
 
 
-class MetaFunction(type):
-    @classmethod
-    def __call__(cls, *args, **kwargs):
-        return cls.__execute__(*args, **kwargs)
 
 
-class Keyword(metaclass = MetaFunction):    
-    status  = KeywordStatus.IGNORED
-    varList = False
-    transl  = ""
-    
-    @classmethod
-    def inPlace(cls, node):
-        if cls.status == KeywordStatus.NOT_SUPPORTED:
-            raise PrecompilerError(f"{cls.__name__} is not supported in CSMPy")
+# class MetaFunction(type):
+#     @classmethod
+#     def __call__(cls, *args, **kwargs):
+#         return cls.__execute__(*args, **kwargs)
+#
+#     name = property(lambda c: c.__name__)
+
+class ConstantDeclaration(Keyword):
+    @staticmethod
+    def __execute__(**assigments): return
+
+    def _keywordArgsToAssignments(self):
+        # # compund syntax: CONSTANT(a = 1, b = 2...)
+        # condition_a = ("args"     in self._base_._fields) and bool(self._base_.args)
+        # condition_k = ("keywords" in self._base_._fields) and bool(self._base_.keywords)
+        #
+        # if condition_k and not condition_a: # deprecated
+        #     src = [ast.unparse(kw) for kw in self._base_.keywords]
+        #     return [ast.parse(s).body[0] for s in src]
+        #
         
-        if cls.status == KeywordStatus.IGNORED:
-            warn(f"{cls.__name__} is ignored", category=SyntaxWarning)
-            return None
+        # atomic sonstant: syntax: c = CONSTANT(123)
+        # if condition_a and not condition_k:
+        if (len(self._base_.args) == 1) and self.name:
+            value = ast.unparse(self._base_.args[0])
+            return self._nodeFromString(f"{self.name} = {value}")
+            
+        # status = confused ...
+        if Lister.exists():  # @UndefinedVariable
+            self.addRemark(f"invalid {self.className()}-declaration")
+        return self.node
         
-        if cls.status.value <= KeywordStatus.NOT_YET_SUPPORTED.value:
-            warn(f"{cls.__name__} has status '{cls.status.humanReadable()}' in CSMPy and will not be proceessed now", category=SyntaxWarning)
-            return None
+        
+    def toString(self): # NOT __str__ !!
+        return self.list()
 
-        return node
+    def getValue(self):
+        return ast.unparse(self._base_.args[0])
     
-
-# DATA statements:
-class PARAM(Keyword):
-    status  = KeywordStatus.OK
-    varList = False
-    transl  = ""
-
-    @staticmethod
-    def __execute__(value):
-        return value 
-
     
-
-class CONSTANT(Keyword):
-    status  = KeywordStatus.OK
-    varList = False
-    transl  = ""
-
-    @staticmethod
-    def __execute__(value):
-        return value 
+    def getName(self):
+        return ast.unparse(self._base_.targets[0].id)
+    
+    
+    def list(self):
+        return ast.unparse(self._keywordArgsToAssignments())
+        return f"{self.name} = {self.toString()})"
 
 
-class INCON(Keyword):
-    status  = KeywordStatus.toINIT
-    varList = False
-    transl  = ""
+                        
+    
+class CONSTANT(ConstantDeclaration):
+    def transformConstants(self):
+        return self._keywordArgsToAssignments()
 
-    @staticmethod
-    def __execute__(value):
-        return value 
 
+class PARAM(ConstantDeclaration):
+    def transformParameters(self):
+        return self._keywordArgsToAssignments()
+
+
+class INCON(ConstantDeclaration):
+    def transformIncons(self):
+        return self._keywordArgsToAssignments()
+
+
+
+class INTGRL(Keyword):
+    declaration = "createStateVariable"
+
+    def transformInitStates(self):
+        args = self._getArgs() 
+        return self._nodeFromString(f"self.{self.declaration}({self.index}, '{self.name}', {args})")
+
+        
+    def transformRestoreValues(self):
+        return self._nodeFromString(f"{self.name} = self.getState({self.index})")
+        
+        
+    def transformUpdate(self):
+        rate = ast.unparse(self._base_.args[1])
+        return self._nodeFromString(f"self.setCurrentRate({self.index}, {rate})")
+        
+        
 
 class FUNCTION(Keyword):
-    status  = KeywordStatus.toINIT
-    varList = False
-    transl  = ""
+    declaration = "createCsmpFunction"
 
     @staticmethod
-    def __execute__(*xyPairs):
-        return
+    def __execute__(*xyPairs): return
 
+    def transformFunctions(self):
+        args = self._getArgs() 
+        return self._nodeFromString(f"self.{self.declaration}({self.index}, '{self.name}', {args})")
+
+        
+class AFGEN(Keyword):        
+    # formally this is not a keyword but a function. But it behaves like a keyword
+    # in that it has to be predefined. Also it's got to be linked to its FUNCTION
+    # object before writing the runnable model.
+    declaration = "createCsmpAFGEN"
+    
+    def __init__(self, node: ast.AST, name: str, **kwargs):
+        super().__init__(node, name, **kwargs)
+        self.linkedFunction = -1
+
+    def link(self, functions):
+        functionName = self._base_.args[0].id
+        self.linkedFunction = functions.get(functionName, -99999)
+        
+    
+    def transformGenerators(self):
+        args = self._getKwds() 
+        return self._nodeFromString(f"self.{self.declaration}({self.index}, function = {self.linkedFunction}, {args})")
+
+        
+    def transformInplace(self):
+        # e.g.: REDF = self.funcGenerators[0].getValue(LAI * 4 - R1)
+        arg = ast.unparse(self._base_.args[1]) 
+        return self._nodeFromString(f"{self.name} = self.funcGenerators[{self.index}].getValue({arg})")
+
+        
+    
 
 class TABLE(Keyword):
     status  = KeywordStatus.toINIT
@@ -101,7 +154,7 @@ class TABLE(Keyword):
 
 
 class OVERLAY(Keyword):
-    status  = KeywordStatus.NOT_SUPPORTED
+    status  = KeywordStatus.not_supported
     varList = False
     transl  = ""
 
@@ -124,7 +177,7 @@ class RENAME(Keyword):
 
 
 class FIXED(Keyword):
-    status  = KeywordStatus.OBSOLETE
+    status  = KeywordStatus.obsolete
     varList = False
     transl  = ""
 
@@ -134,7 +187,7 @@ class FIXED(Keyword):
 
 
 class MEMORY(Keyword):
-    status  = KeywordStatus.UNDECIDED
+    status  = KeywordStatus.undecided
     varList = False
     transl  = ""
 
@@ -144,7 +197,7 @@ class MEMORY(Keyword):
 
 
 class HISTORY(Keyword):
-    status  = KeywordStatus.UNDECIDED
+    status  = KeywordStatus.undecided
     varList = False
     transl  = ""
 
@@ -154,7 +207,7 @@ class HISTORY(Keyword):
 
 
 class STORAGE(Keyword):
-    status  = KeywordStatus.OBSOLETE
+    status  = KeywordStatus.obsolete
     varList = False
     transl  = ""
 
@@ -164,7 +217,7 @@ class STORAGE(Keyword):
 
 
 class DECK(Keyword):
-    status  = KeywordStatus.NOT_SUPPORTED
+    status  = KeywordStatus.not_supported
     varList = False
     transl  = ""
 
@@ -191,7 +244,7 @@ class MACRO(Keyword):
 # NOSORT
 
 class END(Keyword):
-    status  = KeywordStatus.IGNORED
+    status  = KeywordStatus.ignored
     varList = False
     transl  = ""
 
@@ -201,7 +254,7 @@ class END(Keyword):
 
 
 class CONTINUE(Keyword):
-    status  = KeywordStatus.NOT_SUPPORTED
+    status  = KeywordStatus.not_supported
     varList = False
     transl  = ""
 
@@ -211,7 +264,7 @@ class CONTINUE(Keyword):
 
 
 class PROCEDURE(Keyword):
-    status  = KeywordStatus.OBSOLETE
+    status  = KeywordStatus.obsolete
     varList = False
     transl  = ""
 
@@ -221,7 +274,7 @@ class PROCEDURE(Keyword):
 
 
 class STOP(Keyword):
-    status  = KeywordStatus.IGNORED
+    status  = KeywordStatus.ignored
     varList = False
     transl  = ""
 
@@ -231,7 +284,7 @@ class STOP(Keyword):
 
 
 class ENDJOB(Keyword):
-    status  = KeywordStatus.IGNORED
+    status  = KeywordStatus.ignored
     varList = False
     transl  = ""
 
@@ -242,7 +295,7 @@ class ENDJOB(Keyword):
 
 # ENDJOB STACK
 class COMMON(Keyword):
-    status  = KeywordStatus.UNDECIDED
+    status  = KeywordStatus.undecided
     varList = False
     transl  = ""
 
@@ -253,7 +306,7 @@ class COMMON(Keyword):
 
 # COMMON MEM  
 class DATA(Keyword):
-    status  = KeywordStatus.OBSOLETE
+    status  = KeywordStatus.obsolete
     varList = False
     transl  = ""
 
@@ -265,24 +318,21 @@ class DATA(Keyword):
 
 
 # Execution control statements:
-class TIMER(Keyword):
-    status  = KeywordStatus.toINIT
-    varList = False
-    transl  = ""
+class ExecutionControl(Keyword):
 
+    def transformSystemParams(self):
+        args = self._allArguments() 
+        return self._nodeFromString(f"self.set{self.className().capitalize()}({args})")
+
+
+class TIMER(ExecutionControl):
     @staticmethod
-    def __execute__(PRDEL = None, OUTDEL = None, FINTIM = None, DELT = None, DELMIN = None):
-        return
+    def __execute__(PRDEL = None, OUTDEL = None, FINTIM = None, DELT = None, DELMIN = None): return
 
 
-class FINISH(Keyword):
-    status  = KeywordStatus.OK
-    varList = False
-    transl  = 'self.checkEndConditions'
-
+class FINISH(ExecutionControl):
     @staticmethod
-    def __execute__(**conditions):
-        return
+    def __execute__(**conditions): return
 
 
 class RELERR(Keyword):
@@ -305,49 +355,31 @@ class ABSERR(Keyword):
         return
 
 
-class METHOD(Keyword):
-    status  = KeywordStatus.toINIT
-    varList = False
-    transl  = ""
-
+class METHOD(ExecutionControl):
     @staticmethod
-    def __execute__(method: IntegrationMethod|str):
-        return
+    def __execute__(method: IntegrationMethod|str): return
 
 
 
+class TITLE(ExecutionControl):
+    @staticmethod
+    def __execute__(simulationTitle): return
+
+
+class Varlist(Keyword):
+    @staticmethod
+    def __execute__(*varNames): return
+
+    def transformSystemParams(self):
+        args = self._varlist() 
+        return self._nodeFromString(f"self.set{self.className().capitalize()}({args})")
 
 # Output control statements:
-class PRINT(Keyword):
-    status  = KeywordStatus.toINIT
-    varList = True
-    transl  = ""
-
-    @staticmethod
-    def __execute__(*varNames):
-        print(varNames)
-        return
-
+class PRINT(Varlist):
+    pass
 
 class OUTPUT(Keyword):
-    status  = KeywordStatus.toINIT
-    varList = True
-    transl  = ""
-
-    @staticmethod
-    def __execute__(*varNames):
-        return
-
-
-class TITLE(Keyword):
-    status  = KeywordStatus.toINIT
-    varList = False
-    transl  = ""
-
-    @staticmethod
-    def __execute__(simulationTitle):
-        return
-
+    pass
 
 class PREPARE(Keyword):
     status  = KeywordStatus.toINIT
@@ -360,7 +392,7 @@ class PREPARE(Keyword):
 
 
 class PRTPLOT(Keyword):
-    status  = KeywordStatus.UNDECIDED
+    status  = KeywordStatus.undecided
     varList = False
     transl  = ""
 
@@ -390,7 +422,7 @@ class RANGE(Keyword):
 
 
 class RESET(Keyword):
-    status  = KeywordStatus.NOT_SUPPORTED
+    status  = KeywordStatus.not_supported
     varList = False
     transl  = ""
 
@@ -399,10 +431,19 @@ class RESET(Keyword):
         return
 
 
+def registerAndInitializeKeywords(): 
+    for n, c in globals().items(): 
+        if n == n.upper() and not n.startswith("_") and issubclass(c, Keyword):
+            c.initialize()
 
+registerAndInitializeKeywords()
 
 
 if __name__ == '__main__':
     import re
     
-    CONTINUE.inPlace(None)
+    s = "CONSTANT(a=1, b=2)"
+    t = ast.parse(s)
+    dump(t)
+    c = CONSTANT(t.body[0].value)
+    print(c.toString())

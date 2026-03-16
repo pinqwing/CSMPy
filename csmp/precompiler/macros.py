@@ -1,39 +1,56 @@
 import lib.ast_comments as ast
 import copy
 
-try:
-    from .nodeWraps import NodeWrap
-    from ..errors import MacroError, PrecompilerError
-    from .nodeCollector import NodeCollector
-    from .lister import Lister
-except:
-    from csmp.precompiler.nodeWraps import NodeWrap
-    from csmp.errors import MacroError, PrecompilerError
-    from csmp.precompiler.nodeCollector import NodeCollector
-    from csmp.precompiler.lister import Lister
-
-"""
-usage:
-    macros = MacroDeclarationCollector().run(tree)
-    macros = dict([(m.name, m) for m in macros])
-    MacroExpansionCollector().run(tree, macros)
-"""        
+from csmp.errors import MacroError
+from lib.smallUtilities import unindent
 
 
-class MacroWrap(NodeWrap):
-    '''
-    common code for both macr wraps
-    '''
+
+
+class Macro:
 
     def __init__(self, node):
-        super().__init__(node)
-        self.inputs     = []
-        self.outputs    = []
-        self.name       = self._extractFunctionName(node)
+        self.baseLine = node.lineno
+        if len(node.value.args) != 1:
+            raise MacroError(f"MACRO should have exactly one (string-type) argument (line {self.baseLine})")
+        self.source     = unindent(node.value.args[0].value)
+        try:
+            self.code       = ast.parse(self.source)
+        except SyntaxError as e:
+            text = e.text.replace("\n", "")
+            line = self.__offsetLineno(e)
+            raise MacroError(f"syntax error in macro-declaration (line {line}): {text}")
+        
+        declaration     = self.code.body.pop(0) # i.e. the first line
+        self.name       = self._extractFunctionName(declaration)
+        self.inputs     = self._extractInputNames(declaration)
+        self.outputs    = self._extractOutputNames(declaration)
 
 
-    def list(self):
-        return "%04d:%04d %s (%s)" % (self.getStart(), self.getEnd(), self.name, type(self).__name__)
+    def invoke(self, node):
+
+        class transformer(ast.NodeTransformer):
+            # replace placeholder names with actual names 
+            def visit_Name(self, node):
+                subst = names.get(node.id, node)
+                if isinstance(subst, ast.AST):
+                    return subst
+                else: 
+                    node.id = subst
+                    return node
+        
+        inputs     = self._extractArguments(node)
+        outputs    = self._extractOutputNames(node)
+        
+        # make name-dictionary with inputs and outpus:
+        names      = dict(zip(self.inputs,  inputs))
+        names.update(dict(zip(self.outputs, outputs)))
+        # replace applicable names:
+        result     = transformer().visit( copy.deepcopy(self.code) )
+        for n in result.body:
+            ast.copy_location(n, node)
+        # ast allows to insert a list of nodes at once.
+        return result.body
 
 
     def _extractFunctionName(self, node: ast.Call):
@@ -53,6 +70,9 @@ class MacroWrap(NodeWrap):
         
     def _extractOutputNames(self, node):
         # Prabably safe in any case 
+        if not "targets" in node._fields:
+            line = self.__offsetLineno(node) 
+            raise  MacroError(f"macro {self.name} doesn't have an output list (line {line})")
         return self.__extractArgumentNames(node, node.targets[0].elts) 
     
      
@@ -66,156 +86,53 @@ class MacroWrap(NodeWrap):
         assert isinstance(node.value, ast.Call)
         result = [n.id for n in collectibles if isinstance(n, ast.Name)]
         if (len(result) > len(set(result))):
-            raise Exception("duplicate arguments")
+            line = self.__offsetLineno(node) 
+            raise MacroError(f"duplicate arguments in macro {self.name} (line {line})")
         return result
     
+    def __offsetLineno(self, node):
+        return self.baseLine + node.lineno -1 
         
-        
-        
-
-# =====================================================================================================
-#        DECLARATION
-# =====================================================================================================
-
-class MacroDeclarationWrap(MacroWrap):
-    ''' MacroDeclarationWrap
     
-    Generated from a MACRO("...")-call where the macro itself is in the 
-    multiline string argument. This string is parsed as a new ast-tree.
-    The in and out going macro arguments are extracted from the declaration:
-    
-    out1, out2, ..., outn = MACRO(in1, in2, ..., inn)
-    
-    Before injection, these placeholder names are replaced with the 
-    invoking arguments.
+class MacroSubstituter(ast.NodeTransformer):
     '''
-
-    def __init__(self, node):
-        super().__init__(node)
-        self.name       = "<macro>"
-        self.code       = ast.parse("#")
-        try:
-            if len(node.value.args) != 1:
-                raise MacroError("MACRO should have exactly one (string-type) argument")
-            self.source     = self.unIndent(node.value.args[0].value)
-            self.code       = ast.parse(self.source)
-            declaration     = self.code.body.pop(0) # i.e. the first line
-            self.name       = self._extractFunctionName(declaration)
-            self.inputs     = self._extractInputNames(declaration)
-            self.outputs    = self._extractOutputNames(declaration)
-        except SyntaxError as e:
-            self.addRemark(PrecompilerError.rewriteSyntaxError(e, "error in MACRO:"))
-
-
-    def unIndent(self, codeBlock):
-        lines = [line.replace("\t", "    ") for line in codeBlock.split("\n")]
-        ldsp  = 0xff                # number of leading spaces
-        for line in lines:
-            if not line.strip():    
-                continue            # skip no-code lines
-            ldsp = min(ldsp, len(line) - len(line.lstrip(" ")))
-            if ldsp == 0:           
-                return codeBlock    # code block not indented
-        
-        return "\n".join([line[ldsp:] for line in lines])
-        
-    
-class MacroDeclarationCollector(NodeCollector):
+    Collect all MACRO-declarations from an ast tree
+    and replace their invocations.
     '''
-    collect all MACRO-declarations from an ast tree
-    '''
-    wrapperClass = MacroDeclarationWrap
-    
+    def __init__(self):
+        super().__init__()
+        self.codebook = {}
+        
     def run(self, tree):
-        self.visit_Expr     = self._processNode_
-        items = super().run(tree)
-        # self.checkMultipleDefinitions(items)
-        return items 
+        # since macros must be defined before the model,
+        # both processing staps can be performed in on go:
+        self.visit_Expr     = self._processDeclaration_
+        self.visit_Assign   = self._processInvocation_
+
+        self.codebook.clear()
+        self.visit(tree)
 
     
-    def _processNode_(self, node):
+    def _processDeclaration_(self, node):
         if isinstance(node.value, ast.Call) and (node.value.func.id == "MACRO"):
-            return self.accept(node)
+            declaration = Macro(node)
+            self.codebook[declaration.name] = declaration
+            return None
         return node
-        
-
-# =====================================================================================================
-#        EXPANSION
-# =====================================================================================================
 
 
-class MacroInjectorWrap(MacroWrap):
-    '''
-    create sequence of nodes with renamed variables
-    taking the structure from the MACRO declaration
-    and names from the insertion request
-    '''
-    
-
-
-    def __init__(self, node):
-        super().__init__(node)
-        self.inputs     = self._extractArguments(node)
-        self.outputs    = self._extractOutputNames(node)
-        
-        
-    def injection(self, macro):
-        
-        class transformer(ast.NodeTransformer):
-            # replace placeholder names with actual names 
-            def visit_Name(self, node):
-                subst = names.get(node.id, node)
-                if isinstance(subst, ast.AST):
-                    return subst
-                else: 
-                    node.id = subst
-                    return node
-        
-        # make name-dictionary with inputs and outpus:
-        names  = dict(zip(macro.inputs,  self.inputs))
-        names.update(dict(zip(macro.outputs, self.outputs)))
-        # replace applicable names:
-        node = transformer().visit( copy.deepcopy(macro.code) )
-        # pin inserted nodes to the location of the insertion request:
-        for n in node.body:
-            ast.copy_location(n, self.node)
-        # ast allows to insert a list of nodes at once:
-        return node.body
-
-
-
-class MacroExpansionCollector(NodeCollector):
-    '''
-    create an injector node for each function call
-    whose name is in the codebook (s. __init__)
-    '''
-    wrapperClass = MacroInjectorWrap
-    
-    def run(self, tree, codeBook = {}):
-        '''
-        args:
-            tree: ast parsed tree
-            codeBook: dict (name: Macrodeclaration)
-        '''
-        self.codeBook       = codeBook
-        self.extract        = False
-        self.visit_Assign   = self._processNode_
-        items = super().run(tree)
-        return items 
-
-    
-    def _processNode_(self, node):
+    def _processInvocation_(self, node):
         if isinstance(node.value, ast.Call):
             # if this function bears the name of a known MACRO:
-            macro = self.codeBook.get(node.value.func.id, False)
+            macro = self.codebook.get(node.value.func.id, False)
             if macro:
-                self.accept(node)
                 # we're allowed to replace our extracted node 
                 # with a list of nodes that have been translated
                 # fom the expanded macro:
-                return self.nodes[-1].injection(macro)
+                return macro.invoke(node)
         return node
         
+
 
 
 
@@ -223,7 +140,7 @@ class MacroExpansionCollector(NodeCollector):
 if __name__ == '__main__':
     source = '''
 MACRO("""
-    X, DXDT  = EXPONENTIAL(X0, A, B)
+    X, DXDT = EXPONENTIAL(X0, A, B)
     X        = INTGRL(X0, DXDT)
     RATE     = A * (X - B)
     DXDT     = RATE
@@ -232,15 +149,11 @@ MACRO("""
 EX1, R1 = EXPONENTIAL(10., 0.1, 5) 
     '''
 
-    Lister().start()
-    Lister().addInfo("final message", Lister.FINAL, "me")
     tree = ast.parse(source)
-
-    macros = MacroDeclarationCollector().run(tree)
-    macros = dict([(m.name, m) for m in macros])
-    MacroExpansionCollector().run(tree, macros)
+    macros = MacroSubstituter()
+    macros.run(tree)
     
     print("macro definition:\n-----------------")
-    print(ast.unparse(macros["EXPONENTIAL"].code), "\n\n")
+    print(ast.unparse(macros.codebook["EXPONENTIAL"].code), "\n\n")
     print("resulting code:\n---------------")
     print(ast.unparse(tree))

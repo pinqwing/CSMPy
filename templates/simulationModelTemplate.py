@@ -43,7 +43,7 @@ class SimulationModelTemplate(CSMP_Model):
         Called each time step and also in between,
         if the integration method requires so.
         """
-        ":commonBlock:"
+        ":common:"
         
         ":restoreValues:"
         

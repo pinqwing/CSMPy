@@ -2,6 +2,7 @@ import lib.ast_comments as ast
 from .. import functions
 from .. import keywords
 from csmp.errors import PrecompilerError
+from lib.smallUtilities import flatten, dump, printNode
 
 
 
@@ -9,6 +10,7 @@ class Sorter:
     
     def __init__(self):
         self.symbols = set(keywords.symbols()) | set(functions.symbols())
+        self.addSymbol("self")
         
     
     def addSymbol(self, name):

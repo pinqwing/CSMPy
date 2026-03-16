@@ -3,6 +3,7 @@ import inspect
 from io import StringIO
 from csmp.errors import ProgramError
 from pathlib import Path
+import itertools
 
 
 class TemplateBuilder(ast.NodeTransformer):
@@ -23,6 +24,35 @@ class TemplateBuilder(ast.NodeTransformer):
         
         
     
+    def replace2(self, label, items: list, keepLabel = True):
+        # items = itertools.chain(items)
+        subst = items.body if isinstance(items, ast.Module) else items             
+        
+        def comment(node, size = 2):
+            tag = f"# --- {label.value}: ----------"
+            result = [ast.Comment(value = "",  inline = False),
+                      ast.Comment(value = tag, inline = False)]
+            ast.copy_location(result[0], node)
+            ast.copy_location(result[1], node)
+            return result[:size]
+
+            
+        def replaceBranch(node):
+            tag = f":{label.name}:"
+            if isinstance(node.value, ast.Constant) and (node.value.value == tag):
+                items = comment(node, 2 if keepLabel else 1)
+                for stmt in subst:
+                    items.append(ast.copy_location(stmt, node))
+                return items
+                
+            else:
+                return node
+        
+        self.visit_Expr = replaceBranch
+        self.visit(self.code)
+        ast.fix_missing_locations(self.code)
+
+        
     def replace(self, tag: str, items: list, keepLabel = True):
         codeObject = [item.statement for item in items]
         subst = codeObject.body if isinstance(codeObject, ast.Module) else codeObject             

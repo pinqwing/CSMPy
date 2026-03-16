@@ -35,7 +35,7 @@ class NodeWrap:
     
     
     def list(self):
-        return "%04d:%04d %s (%s)" % (self.getStart(), self.getEnd(), self.getSource(), type(self).__name__)
+        return "%04d:%04d %s" % (self.getStart(), self.getEnd(), self.getSource())
     
     
     def getLineNumber(self):
@@ -56,9 +56,13 @@ class NodeWrap:
         return self.list()
 
 
-    def sync(self, peer: NodeWrap):
-        ast.copy_location(peer.node, self.node)
-        return peer
+    def sync(self, peer):
+        if hasattr(peer, "__iter__"):
+            return [self.sync(p) for p in peer]
+        else:
+            node = peer.node if isinstance(peer, NodeWrap) else peer
+            ast.copy_location(node, self.node)
+            return peer
     
     
     
