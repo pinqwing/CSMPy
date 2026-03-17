@@ -95,11 +95,11 @@ Initial constants get their value after the CONSTANTs and PARAMS. Therefore, the
     
 FUNCTION
 ~~~~~~~~
-*CSMP::
+* CSMP::
 
     FUNCTION REDFT=0.,1.,0.2,1.,0.25,0.,0.5,0
     
-*CSMPy::
+* CSMPy::
 
     REDFT = FUNCTION(0., 1., 0.2, 1., 0.25, 0., 0.5, 0)
     REDFT = FUNCTION((0., 1.), (0.2, 1.), (0.25, 0.), (0.5, 0))
@@ -145,9 +145,9 @@ INITIAL, DYNAMIC, TERMINAL
 
 Unlike FORTRAN, labels do not exist in Python. Therefore, in CSMPy
 the main segment labels are mimicked by comment lines. By default
-main segment labels are recognized by their format
+main segment labels are recognized by their format::
 
-    --- <label> ---
+    # --- <label> ---
 
 The format may be changed in csmp.config, however, the # that signals
 a Python comment line is compulsory.
@@ -176,6 +176,7 @@ There are two ways to define a macro in CSMPy. The first one has the macro code
 in a multi-line string argument; The second one uses the function def-syntax:
 
 * CSMPy::
+
     MACRO("""
         X, DXDT = EXPONENTIAL(X0, A, B)
         X        = INTGRL(X0, DXDT)
@@ -183,7 +184,7 @@ in a multi-line string argument; The second one uses the function def-syntax:
         DXDT     = RATE
         """)
     
-    def MACRO(name = "EXPONENTIAL"):
+    def MACRO():
         X, DXDT  = EXPONENTIAL(X0, A, B)  
         X        = INTGRL(X0, DXDT)  
         RATE     = A * (X - B)
