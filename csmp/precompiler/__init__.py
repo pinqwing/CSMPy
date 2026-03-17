@@ -13,7 +13,7 @@ from csmp.keywords import CSMP_Function
 from csmp.precompiler.lister import Lister, WARNING
 from csmp.precompiler.loader import ModelLoader
 from csmp.precompiler.nodeCollector import ImportCollector, KeywordCollector
-from csmp.precompiler.nodeWraps import CSMPKeywordWrap, NodeWrap, FunctionGeneratorWrap
+from csmp.precompiler.nodeWraps import NodeWrap
 from csmp.precompiler.segment import ModelSegments, SegmentLabel
 from csmp.precompiler.sorter import Sorter
 from csmp.precompiler.template import TemplateBuilder
@@ -139,7 +139,7 @@ class Precompiler:
             for segment in self.segments:
                 if segment.contains(line):
                     if isinstance(node, ast.Comment):
-                        dump(node)
+                        return
                     segment.appendStatement(statement)
                     self._validateStatement(statement)
                     break
@@ -197,16 +197,16 @@ class Precompiler:
             return [node.body[0]] if node.body else []
 
         builder     = TemplateBuilder(template) if builder is None else builder
-        builder.replace2(KeywordLabels.common, common())
+        builder.replace(KeywordLabels.common, common())
 
-        builder.replace2(KeywordLabels.initial,    [w.node for w in self.segments.initial.getItems()],  False)
-        builder.replace2(KeywordLabels.dynamic,    [w.node for w in self.segments.dynamic.getItems()],  False)
-        builder.replace2(KeywordLabels.terminal,   [w.node for w in self.segments.terminal.getItems()], False)
+        builder.replace(KeywordLabels.initial,    [w.node for w in self.segments.initial.getItems()],  False)
+        builder.replace(KeywordLabels.dynamic,    [w.node for w in self.segments.dynamic.getItems()],  False)
+        builder.replace(KeywordLabels.terminal,   [w.node for w in self.segments.terminal.getItems()], False)
 
         for cat in KeywordLabels: # this loops through _all_ cats and destroys any remaining placeholders
             items       = self.keywordNodes[cat]
             transformed = flatten([item.transform(cat) for item in items])
-            builder.replace2(cat, transformed, True)
+            builder.replace(cat, transformed, True)
 
         builder.write(file)
 
@@ -302,19 +302,3 @@ class Precompiler:
         except:
             print("*** segmentation incomplete")
             
-if __name__ == '__main__':
-    
-
-        
-    
-    
-    mdl = Precompiler()
-    mdl.compile("../../models/test.csm.py")
-    mdl.writeSummary()
-    # print("\n", '-'*80, '\n')
-    # mdl.saveListFile(True)
-    print("\n", '-'*80, '\n')
-    # mdl.writeTemplate()
-    # mdl.debugSegmentation()
-    # for o in sorted(NodeWrap.objects, key=lambda o: str(o)):
-    #     print(o)    

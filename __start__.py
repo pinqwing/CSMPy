@@ -31,11 +31,11 @@ if __name__ == '__main__':
     
     mdl = Precompiler(options)
     mdl.compile("./models/test.csm.py")
-    # mdl.printSummary()
+    mdl.writeSummary()
     # print("\n", '-'*80, '\n')
     # mdl.writeListFile()
     print("\n", '-'*80, '\n')
-    # mdl.writeTemplate()
+    mdl.writeTemplate()
     # mdl.debugSegmentation()
     # for o in sorted(NodeWrap.objects, key=lambda o: str(o)):
     #     print(o)    

@@ -1,14 +1,8 @@
 import lib.ast_comments as ast
-from collections import defaultdict
-from enum import Enum
 
-from ..customTypes import VarType
-from .nodeWraps import NodeWrap, IntegralDecl, ConstantDecl, LabelDecl
-from .segment import SegmentLabel
-from csmp.precompiler.nodeWraps import FunctionDecl
-from csmp.precompiler.keywordsBase import Keyword
 from csmp import errors
-from csmp.precompiler.keywords import ConstantDeclaration
+from csmp.precompiler.keywords import ConstantDeclaration, Keyword
+from csmp.precompiler.nodeWraps import NodeWrap
 
 
 
@@ -75,40 +69,24 @@ class KeywordCollector(ast.NodeTransformer):
         return node
 
 
-class NodeCollector(ast.NodeTransformer):
+class ImportCollector(ast.NodeTransformer):
 
-    wrapperClass = NodeWrap
-     
     def __init__(self):
         self.nodes   = []
         self.extract = True
 
     
     def run(self, tree):
+        self.visit_Import       = self._processNode_
+        self.visit_ImportFrom   = self._processNode_
         self.visit(tree)
         return self.nodes
 
 
     def accept(self, node, *args, **kwargs):
-        self.nodes.append(self.wrapperClass(node, *args, **kwargs))
+        self.nodes.append(NodeWrap(node, *args, **kwargs))
         return None if self.extract else node
     
     
     def _processNode_(self, node):
-        return None 
-        
-
-    
-class ImportCollector(NodeCollector):
-    # wrapperClass = ImportDecl
-    
-    def run(self, tree):
-        self.visit_Import       = self._processNode_
-        self.visit_ImportFrom   = self._processNode_
-        return super().run(tree)
-    
-    
-    def _processNode_(self, node):
         return self.accept(node)
-
-

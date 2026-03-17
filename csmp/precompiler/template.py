@@ -9,6 +9,12 @@ import itertools
 class TemplateBuilder(ast.NodeTransformer):
     
     def __init__(self, template):
+        ''' turn a generic model template with placeholder labels into valid source code.
+        
+        
+        
+        :param template:
+        '''
 
         if isinstance(template, type):
             source      = inspect.getsource(template)
@@ -24,7 +30,7 @@ class TemplateBuilder(ast.NodeTransformer):
         
         
     
-    def replace2(self, label, items: list, keepLabel = True):
+    def replace(self, label, items: list, keepLabel = True):
         # items = itertools.chain(items)
         subst = items.body if isinstance(items, ast.Module) else items             
         
@@ -41,25 +47,6 @@ class TemplateBuilder(ast.NodeTransformer):
             tag = f":{label.name}:"
             if isinstance(node.value, ast.Constant) and (node.value.value == tag):
                 items = comment(node, 2 if keepLabel else 1)
-                for stmt in subst:
-                    items.append(ast.copy_location(stmt, node))
-                return items
-                
-            else:
-                return node
-        
-        self.visit_Expr = replaceBranch
-        self.visit(self.code)
-        ast.fix_missing_locations(self.code)
-
-        
-    def replace(self, tag: str, items: list, keepLabel = True):
-        codeObject = [item.statement for item in items]
-        subst = codeObject.body if isinstance(codeObject, ast.Module) else codeObject             
-        
-        def replaceBranch(node):
-            if isinstance(node.value, ast.Constant) and (node.value.value == tag):
-                items = [node] if keepLabel else []
                 for stmt in subst:
                     items.append(ast.copy_location(stmt, node))
                 return items
