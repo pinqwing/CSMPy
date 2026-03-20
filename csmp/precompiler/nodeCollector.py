@@ -1,25 +1,36 @@
 import lib.ast_comments as ast
 
 from csmp import errors
-from csmp.precompiler.keywords import ConstantDeclaration, Keyword
 from csmp.precompiler.nodeWraps import NodeWrap
+from csmp.precompiler.statementBase import Statement, ConstantDeclaration
 
 
 
-class KeywordCollector(ast.NodeTransformer):
+
+class StatementCollector(ast.NodeTransformer):
     
     def __init__(self):
         super().__init__()
-        self.keywords = []
+        self.statements = []
+        # marker node:
+        self.delendus   = ast.parse("0").body[0]
+
     
     def run(self, tree):
         self.visit(tree)
-        return self.keywords
+        
+        # it is hard to remove parent nodes while in vistit, so instead
+        # the lines have been marked for later removal:
+        linesToRemove = [b for b in tree.body if any([node is self.delendus for node in ast.walk(b)])]
+        for line in linesToRemove:
+            tree.body.remove(line)
+            
+        return self.statements
         
             
-    def addKeyword(self, keyword: Keyword):
-        self.keywords.append(keyword)
-        return keyword
+    def addStatement(self, statement: Statement):
+        self.statements.append(statement)
+        return statement
     
     
     def getTargetName(self, node):
@@ -29,42 +40,54 @@ class KeywordCollector(ast.NodeTransformer):
             raise errors.PrecompilerError("cannot unpack CSMP-statement")
         return node.targets[0].id
     
-
+    
     def match(self, node):    
         if ("value" in node._fields) and isinstance(node.value, ast.Call):
-            keywordClass = Keyword[node.value.func.id]
-            return keywordClass
+            statementClass = Statement[node.value.func.id]
+            return statementClass
+
 
     
-    def compoundKeyword(self, keyword, node):
+    def breakUpCompoundStatement(self, node):
         # compound constants cannot be sorted.
         # best to split them right away:
-        for kwd in node.value.keywords:
-            name    = kwd.arg
-            value   = ast.unparse(kwd.value) 
-            subnode = keyword._nodeFromString(f"{name} = {keyword.className()}({value})")
-            self.addKeyword(type(keyword)(subnode, name))
+        result    = []
+        statement = Statement(node)
+        stmtClass = Statement[statement.fName]
+        for name, value in statement.kwargs:
+            newNode = statement._nodeFromString(f"{name} = {statement.fName}({value})")
+            self.statements.append(stmtClass(newNode.value))
+            result.append(newNode)
+        return None
             
             
     def visit_Expr(self, node):
-        keywordClass = self.match(node)
-        if keywordClass is not None:
-            keyword = keywordClass(node)
-            if isinstance(keyword, ConstantDeclaration):
-                self.compoundKeyword(keyword, node)
-            else:
-                self.addKeyword(keyword)
-            return keyword.inplace()
+        statementClass = self.match(node)
+        if statementClass is not None:
+            if  issubclass(statementClass, ConstantDeclaration):
+                return self.breakUpCompoundStatement(node.value)
         return node
         
 
-    def visit_Assign(self, node):
-        keywordClass = self.match(node)
-        if keywordClass is not None:
-            name = self.getTargetName(node)
-            keyword = self.addKeyword(keywordClass(node, name))
-            return keyword.inplace()
+    def visit_Call(self, node):
+        self.generic_visit(node)
+        statement = Statement.get(node)
+        if statement is not None:
+            self.addStatement(statement)
+            subst = statement.inplace()
+            if subst is None:
+                # mark parent for removal:
+                return self.delendus
+            else:
+                return subst
         return node
+
+
+    def removeDeleted(self, node):
+        if hasattr(node, "deleted") and node.deleted == True:
+            return None
+        return node
+
 
 
 class ImportCollector(ast.NodeTransformer):

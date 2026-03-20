@@ -36,11 +36,6 @@ class NodeWrap:
     def getSource(self): # DONE: renamed from source()
         return ast.unparse(self.node)
     
-    
-    def list(self):
-        return "%04d:%04d %s" % (self.getStart(), self.getEnd(), self.getSource())
-    
-    
     def getLineNumber(self):
         return self.getStart()
     
@@ -56,7 +51,7 @@ class NodeWrap:
     
     
     def __repr__(self):
-        return self.list()
+        return "%04d:%04d %s" % (self.getStart(), self.getEnd(), self.getSource())
 
 
     def sync(self, peer):

@@ -40,6 +40,7 @@ if __name__ == '__main__':
         mdl.writeTemplate()
     else:
         mdl.writeListFile(sys.stdout)
+        # mdl.writeTemplate()
         # mdl.debugSegmentation()
     # for o in sorted(NodeWrap.objects, key=lambda o: str(o)):
     #     print(o)    

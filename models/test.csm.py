@@ -31,11 +31,9 @@ LAI     = AMIN1(WSH / 500.,  5.)
 EX1, R1 = EXPONENTIAL(10., 0.1, 5) 
 EX2, R2 = EXPONENTIAL(WRTI, CVF, GPHST / 5.) 
 REDFT   = FUNCTION(0.,1.,0.2,1.,0.25,0.,0.5,0.)
-REDFT1   = FUNCTION(0.,1.,0.2,1.,0.25,0.,0.5,0.)
-REDFT2   = FUNCTION(0.,1.,0.2,1.,0.25,0.,0.5,0.)
 REDF    = AFGEN(REDFT,LAI*4 - R1, extra=Clip)
-REDF2    = AFGEN(REDFT2,LAI*4 - R1, extra=Clip)
-REDF2    = AFGEN(REDFT1,LAI*4 - R1, extra=Clip)
+REDF1    = AFGEN(REDFT,LAI*4 - R1, extra=Clip)
+REDF2    = MEMORY(AFGEN(REDFT,LAI*4 - R1, extra=Clip), 0)
 rgr      = PARAM(0.123)
 
 PARAM(
@@ -43,7 +41,7 @@ PARAM(
     GPHST = 400.,
     PPI = PI    
     )
-
+c   = CONSTANT(123)
 CONSTANT(
     PI = 3.141592,
     PI2 = 2 * PI,

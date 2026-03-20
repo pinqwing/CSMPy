@@ -1,15 +1,15 @@
 import lib.ast_comments as ast
 from csmp import functions
-from csmp.precompiler import keywords
 from csmp.errors import PrecompilerError
 from lib.smallUtilities import flatten, dump, printNode
+from csmp.precompiler import csmpStatements
 
 
 
 class Sorter:
     
     def __init__(self):
-        self.symbols = set(keywords.symbols()) | set(functions.symbols())
+        self.symbols = set(csmpStatements.symbols()) | set(functions.symbols())
         self.addSymbol("self")
         
     

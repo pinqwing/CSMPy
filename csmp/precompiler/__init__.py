@@ -7,19 +7,16 @@ from pathlib import Path
 import lib.ast_comments as ast
 from lib.smallUtilities import flatten, dump
 
-from csmp.customTypes import VarType
 from csmp.errors import PrecompilerError, SegmentationError
 from csmp.precompiler.lister import Lister, WARNING
 from csmp.precompiler.loader import ModelLoader
-from csmp.precompiler.nodeCollector import ImportCollector, KeywordCollector
+from csmp.precompiler.nodeCollector import ImportCollector, StatementCollector
 from csmp.precompiler.nodeWraps import NodeWrap
 from csmp.precompiler.segment import ModelSegments, SegmentLabel
 from csmp.precompiler.sorter import Sorter
 from csmp.precompiler.template import TemplateBuilder
-from csmp.precompiler.keywordsBase import KeywordLabels
+from csmp.precompiler.statementBase import StatementLabels, Statement
 from csmp.precompiler.macros import MacroSubstituter
-# from templates.simulationModelTemplate import SimulationModelTemplate
-from lib.settings import globalConfig
 
 
 
@@ -30,11 +27,11 @@ class Precompiler:
         self.reset()
 
     
-    consts  = property(lambda p: p.keywordNodes[KeywordLabels.constants])
-    params  = property(lambda p: p.keywordNodes[KeywordLabels.parameters])
-    incons  = property(lambda p: p.keywordNodes[KeywordLabels.incons])
-    states  = property(lambda p: p.keywordNodes[KeywordLabels.initStates])
-    fundefs = property(lambda p: p.keywordNodes[KeywordLabels.functions])
+    consts  = property(lambda p: p.statementNodes[StatementLabels.constants])
+    params  = property(lambda p: p.statementNodes[StatementLabels.parameters])
+    incons  = property(lambda p: p.statementNodes[StatementLabels.incons])
+    states  = property(lambda p: p.statementNodes[StatementLabels.initStates])
+    fundefs = property(lambda p: p.statementNodes[StatementLabels.functions])
         
         
     def compile(self, sourceFile):
@@ -55,7 +52,7 @@ class Precompiler:
         self.imports        = []
         self.init           = []
         self.segments       = ModelSegments(ast.parse("#"))
-        self.keywordNodes   = defaultdict(list)
+        self.statementNodes   = defaultdict(list)
         
 
     def processCode(self):
@@ -67,6 +64,7 @@ class Precompiler:
         
         try:
             self.macroExpansion()
+            Statement.setParentage(self.ast) # after macroSubstitution
             self.collectDeclarations()
             self.modelSegmentation()
             self.assignStatements()
@@ -104,20 +102,20 @@ class Precompiler:
                     self.readOnly[name] = decl
                      
         self.imports = ImportCollector().run(self.ast)
-        allKwdNodes  = KeywordCollector().run(self.ast)
+        allKwdNodes  = StatementCollector().run(self.ast)
             
         for node in allKwdNodes:
             for cat in node.categories:
-                self.keywordNodes[cat].append(node)
+                self.statementNodes[cat].append(node)
                 
-        addReadOnly(self.keywordNodes[KeywordLabels.initStates])
-        addReadOnly(self.keywordNodes[KeywordLabels.constants])
-        addReadOnly(self.keywordNodes[KeywordLabels.parameters])
-        addReadOnly(self.keywordNodes[KeywordLabels.incons])
-        addReadOnly(self.keywordNodes[KeywordLabels.functions])
+        addReadOnly(self.statementNodes[StatementLabels.initStates])
+        addReadOnly(self.statementNodes[StatementLabels.constants])
+        addReadOnly(self.statementNodes[StatementLabels.parameters])
+        addReadOnly(self.statementNodes[StatementLabels.incons])
+        addReadOnly(self.statementNodes[StatementLabels.functions])
 
-        functions = dict([(f.name, f.index) for f in self.keywordNodes[KeywordLabels.functions]])
-        for gen in self.keywordNodes[KeywordLabels.generators]:
+        functions = dict([(f.name, f.index) for f in self.statementNodes[StatementLabels.functions]])
+        for gen in self.statementNodes[StatementLabels.generators]:
             gen.link(functions)
         
     
@@ -126,9 +124,9 @@ class Precompiler:
         if isinstance(node, ast.Assign):
             for n in ast.walk(node.targets[0]):
                 if isinstance(n, ast.Name): 
-                    keyword = self.readOnly.get(n.id, False)
-                    if keyword:
-                        statement.addRemark(f"'{n.id}' is immutable while it has been declared {keyword.className()}", 
+                    statement = self.readOnly.get(n.id, False)
+                    if statement:
+                        statement.addRemark(f"'{n.id}' is immutable while it has been declared {statement.className()}", 
                                             originator = "validate")
                  
                     
@@ -154,10 +152,10 @@ class Precompiler:
 
     @Lister.withContextError
     def sort(self):
-        consts, params, incons, states, fundefs = [self.keywordNodes[l]for l in (
-                                                    KeywordLabels.constants, KeywordLabels.parameters,
-                                                    KeywordLabels.incons,    KeywordLabels.initStates,
-                                                    KeywordLabels.functions)] 
+        consts, params, incons, states, fundefs = [self.statementNodes[l]for l in (
+                                                    StatementLabels.constants, StatementLabels.parameters,
+                                                    StatementLabels.incons,    StatementLabels.initStates,
+                                                    StatementLabels.functions)] 
         
         codeSorter  = Sorter()
         codeSorter.useImports(self.imports)
@@ -202,13 +200,13 @@ class Precompiler:
         placeHolder = self.options.templatePlcHldr
         builder     = TemplateBuilder(template, segmentComment = comment, placeholders = placeHolder)
         
-        builder.replace(KeywordLabels.common, common())
-        builder.replace(KeywordLabels.initial,    [w.node for w in self.segments.initial.getItems()],  False)
-        builder.replace(KeywordLabels.dynamic,    [w.node for w in self.segments.dynamic.getItems()],  False)
-        builder.replace(KeywordLabels.terminal,   [w.node for w in self.segments.terminal.getItems()], False)
+        builder.replace(StatementLabels.common, common())
+        builder.replace(StatementLabels.initial,    [w.node for w in self.segments.initial.getItems()],  False)
+        builder.replace(StatementLabels.dynamic,    [w.node for w in self.segments.dynamic.getItems()],  False)
+        builder.replace(StatementLabels.terminal,   [w.node for w in self.segments.terminal.getItems()], False)
 
-        for cat in KeywordLabels: # this loops through _all_ cats and destroys any remaining placeholders
-            items       = self.keywordNodes[cat]
+        for cat in StatementLabels: # this loops through _all_ cats and destroys any remaining placeholders
+            items       = self.statementNodes[cat]
             transformed = flatten([item.transform(cat) for item in items])
             builder.replace(cat, transformed, True)
 
@@ -238,26 +236,26 @@ class Precompiler:
                 for item in items:
                     print(item, file=file)
                 
-            for lbl in [KeywordLabels.functions,
-                        KeywordLabels.generators,
-                        KeywordLabels.initStates,
-                        KeywordLabels.constants,
-                        KeywordLabels.parameters,
-                        KeywordLabels.systemParams,
-                        KeywordLabels.incons, 
-                        KeywordLabels.initial, 
-                        KeywordLabels.restoreValues,
-                        KeywordLabels.dynamic,
-                        KeywordLabels.update,
-                        KeywordLabels.terminal]:
-                if   lbl == KeywordLabels.initial:
+            for lbl in [StatementLabels.functions,
+                        StatementLabels.generators,
+                        StatementLabels.initStates,
+                        StatementLabels.constants,
+                        StatementLabels.parameters,
+                        StatementLabels.systemParams,
+                        StatementLabels.incons, 
+                        StatementLabels.initial, 
+                        StatementLabels.restoreValues,
+                        StatementLabels.dynamic,
+                        StatementLabels.update,
+                        StatementLabels.terminal]:
+                if   lbl == StatementLabels.initial:
                     items = self.segments.initial.getItems()
-                elif lbl == KeywordLabels.dynamic:
+                elif lbl == StatementLabels.dynamic:
                     items = self.segments.dynamic.getItems()
-                elif lbl == KeywordLabels.terminal:
+                elif lbl == StatementLabels.terminal:
                     items = self.segments.terminal.getItems()
                 else:
-                    items = [NodeWrap(w.transform(lbl)) for w in self.keywordNodes[lbl]]  
+                    items = [NodeWrap(w.transform(lbl)) for w in self.statementNodes[lbl]]  
                 output(lbl.value, items)        
         
         if sorted:
