@@ -15,7 +15,7 @@ from csmp.precompiler.nodeWraps import NodeWrap
 from csmp.precompiler.segment import ModelSegments, SegmentLabel
 from csmp.precompiler.sorter import Sorter
 from csmp.precompiler.template import TemplateBuilder
-from csmp.precompiler.statementBase import StatementLabels, Statement
+from csmp.precompiler.statementBase import StatementCategory, Statement
 from csmp.precompiler.macros import MacroSubstituter
 
 
@@ -27,11 +27,11 @@ class Precompiler:
         self.reset()
 
     
-    consts  = property(lambda p: p.statementNodes[StatementLabels.constants])
-    params  = property(lambda p: p.statementNodes[StatementLabels.parameters])
-    incons  = property(lambda p: p.statementNodes[StatementLabels.incons])
-    states  = property(lambda p: p.statementNodes[StatementLabels.initStates])
-    fundefs = property(lambda p: p.statementNodes[StatementLabels.functions])
+    consts  = property(lambda p: p.statementNodes[StatementCategory.constants])
+    params  = property(lambda p: p.statementNodes[StatementCategory.parameters])
+    incons  = property(lambda p: p.statementNodes[StatementCategory.incons])
+    states  = property(lambda p: p.statementNodes[StatementCategory.initStates])
+    fundefs = property(lambda p: p.statementNodes[StatementCategory.functions])
         
         
     def compile(self, sourceFile):
@@ -111,15 +111,15 @@ class Precompiler:
                 self.statementNodes[cat].append(node)
                 
         # define selected assiggments as read-only after declaration:
-        addReadOnly(self.statementNodes[StatementLabels.initStates])
-        addReadOnly(self.statementNodes[StatementLabels.constants])
-        addReadOnly(self.statementNodes[StatementLabels.parameters])
-        addReadOnly(self.statementNodes[StatementLabels.incons])
-        addReadOnly(self.statementNodes[StatementLabels.functions])
+        addReadOnly(self.statementNodes[StatementCategory.initStates])
+        addReadOnly(self.statementNodes[StatementCategory.constants])
+        addReadOnly(self.statementNodes[StatementCategory.parameters])
+        addReadOnly(self.statementNodes[StatementCategory.incons])
+        addReadOnly(self.statementNodes[StatementCategory.functions])
 
         # link functino generators to their functions:
-        functions = dict([(f.name, f.index) for f in self.statementNodes[StatementLabels.functions]])
-        for gen in self.statementNodes[StatementLabels.generators]:
+        functions = dict([(f.name, f.index) for f in self.statementNodes[StatementCategory.functions]])
+        for gen in self.statementNodes[StatementCategory.generators]:
             gen.link(functions)
         
     
@@ -157,9 +157,9 @@ class Precompiler:
     @Lister.withContextError
     def sort(self):
         consts, params, incons, states, fundefs = [self.statementNodes[l]for l in (
-                                                    StatementLabels.constants, StatementLabels.parameters,
-                                                    StatementLabels.incons,    StatementLabels.initStates,
-                                                    StatementLabels.functions)] 
+                                                    StatementCategory.constants, StatementCategory.parameters,
+                                                    StatementCategory.incons,    StatementCategory.initStates,
+                                                    StatementCategory.functions)] 
         
         codeSorter  = Sorter()
         codeSorter.useImports(self.imports)
@@ -204,12 +204,12 @@ class Precompiler:
         placeHolder = self.options.templatePlcHldr
         builder     = TemplateBuilder(template, segmentComment = comment, placeholders = placeHolder)
         
-        builder.replace(StatementLabels.common, common())
-        builder.replace(StatementLabels.initial,    [w.node for w in self.segments.initial.getItems()],  False)
-        builder.replace(StatementLabels.dynamic,    [w.node for w in self.segments.dynamic.getItems()],  False)
-        builder.replace(StatementLabels.terminal,   [w.node for w in self.segments.terminal.getItems()], False)
+        builder.replace(StatementCategory.common, common())
+        builder.replace(StatementCategory.initial,    [w.node for w in self.segments.initial.getItems()],  False)
+        builder.replace(StatementCategory.dynamic,    [w.node for w in self.segments.dynamic.getItems()],  False)
+        builder.replace(StatementCategory.terminal,   [w.node for w in self.segments.terminal.getItems()], False)
 
-        for cat in StatementLabels: # this loops through _all_ cats and destroys any remaining placeholders
+        for cat in StatementCategory: # this loops through _all_ cats and destroys any remaining placeholders
             items       = self.statementNodes[cat]
             transformed = flatten([item.transform(cat) for item in items])
             builder.replace(cat, transformed, True)
@@ -240,23 +240,23 @@ class Precompiler:
                 for item in items:
                     print(item, file=file)
                 
-            for lbl in [StatementLabels.functions,
-                        StatementLabels.generators,
-                        StatementLabels.initStates,
-                        StatementLabels.constants,
-                        StatementLabels.parameters,
-                        StatementLabels.systemParams,
-                        StatementLabels.incons, 
-                        StatementLabels.initial, 
-                        StatementLabels.restoreValues,
-                        StatementLabels.dynamic,
-                        StatementLabels.update,
-                        StatementLabels.terminal]:
-                if   lbl == StatementLabels.initial:
+            for lbl in [StatementCategory.functions,
+                        StatementCategory.generators,
+                        StatementCategory.initStates,
+                        StatementCategory.constants,
+                        StatementCategory.parameters,
+                        StatementCategory.systemParams,
+                        StatementCategory.incons, 
+                        StatementCategory.initial, 
+                        StatementCategory.restoreValues,
+                        StatementCategory.dynamic,
+                        StatementCategory.update,
+                        StatementCategory.terminal]:
+                if   lbl == StatementCategory.initial:
                     items = self.segments.initial.getItems()
-                elif lbl == StatementLabels.dynamic:
+                elif lbl == StatementCategory.dynamic:
                     items = self.segments.dynamic.getItems()
-                elif lbl == StatementLabels.terminal:
+                elif lbl == StatementCategory.terminal:
                     items = self.segments.terminal.getItems()
                 else:
                     items = [NodeWrap(w.transform(lbl)) for w in self.statementNodes[lbl]]  

@@ -1,9 +1,8 @@
-# -- encoding: utf-8 ---
+#@PydevCodeAnalysisIgnore
 from csmp import MACRO, TITLE, PARAM, CONSTANT, METHOD, TIMER, OUTPUT, PRINT
 from csmp import EXP, AMIN1
 from csmp import Clip
 
-TITLE("DRY MATTER PRODUCTION")
 
 MACRO("""
     X, DXDT  = EXPONENTIAL(X0, A, B)
@@ -12,8 +11,18 @@ MACRO("""
     DXDT     = RATE
     """)
 
-# --- INITIAL ---"
+# --- INITIAL ---
 T = 0 # t to test initial segment
+PARAM(
+    CVF = 0.7, 
+    GPHST = 400.,
+    PPI = PI    
+    )
+c   = CONSTANT(123)
+CONSTANT(
+    PI = 3.141592,
+    PI2 = 2 * PI,
+    )      
 
 # --- DYNAMIC ---    
 TWT     = WSH + WRT
@@ -22,7 +31,6 @@ WRT     = INTGRL(WRTI, GRT)
 WSHI    = INCON(50.)
 WRTI    = INCON(50.)
 GSH     = 0.7 * GTW
-# COMMENTAAR
 GRT     = 0.3 * GTW
 GTW     = (GPHOT - MAINT) * CVF
 MAINT   = (WSH + WRT) * 0.015
@@ -36,17 +44,8 @@ REDF1    = AFGEN(REDFT,LAI*4 - R1, extra=Clip)
 REDF2    = MEMORY(AFGEN(REDFT,LAI*4 - R1, extra=Clip), 0)
 rgr      = PARAM(0.123)
 
-PARAM(
-    CVF = 0.7, 
-    GPHST = 400.,
-    PPI = PI    
-    )
-c   = CONSTANT(123)
-CONSTANT(
-    PI = 3.141592,
-    PI2 = 2 * PI,
-    )      
 
+TITLE("DRY MATTER PRODUCTION")
 TIMER(FINTIM = 100., DELT = 1., PRDEL = 5., OUTDEL = 5.)
 METHOD("RECT")
 PRINT(TWT, WSH, WRT, GTW)

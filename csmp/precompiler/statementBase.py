@@ -25,7 +25,7 @@ class StatementStatus(Enum):
         return self.name.replace("_", " ")
 
 
-class StatementLabels(Enum):    
+class StatementCategory(Enum):    
     initial         = "INITIAL segment"
     dynamic         = "DYNAMIC segment"
     terminal        = "TERMINAL segment"
@@ -199,7 +199,7 @@ class Statement(StatementClass):
         return None
 
 
-    def transform(self, category: StatementLabels):
+    def transform(self, category: StatementCategory):
         # do not shortcut this method, for overriding allows for late transformations
         return self.transformations.get(category)
 
@@ -240,7 +240,7 @@ class AssigningStatement(Statement):
     def transformInplace(self):
         return None
 
-    def transform(self, category: StatementLabels):
+    def transform(self, category: StatementCategory):
         return self.transformations.get(category)
         
 
@@ -261,7 +261,7 @@ class ConstantDeclaration(AssigningStatement):
     make the names and values explicit; therefore the StatementCollector immediately splits
     such statements into their atomic form (a = CONSTANT(1); b = CONSTANT(2) ...)
     '''
-    cat = StatementLabels.constants
+    cat = StatementCategory.constants
         
     def __init__(self, node):
         super().__init__(node, 1)
@@ -289,7 +289,7 @@ class ExecutionControl(Statement):
     def __init__(self, node):
         super().__init__(node)
         self.transformations = {
-            StatementLabels.systemParams:
+            StatementCategory.systemParams:
                 self._nodeFromString(f"self.set{self.className(1)}({self._allArgs()})")
                 }
             

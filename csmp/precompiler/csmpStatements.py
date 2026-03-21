@@ -3,7 +3,7 @@ This modue defines the CSMP statements, i.e. statements, that require some actio
 includes more than only returning a function result.
 
 The Statement's class structure takes a leaf from the book of ast: The methods they define determine
-to which categories (StatementLabels) they pertain. Such methods conform the naming format
+to which categories (StatementCategory) they pertain. Such methods conform the naming format
 
 def transformLabelname(self): ...
 
@@ -13,7 +13,7 @@ def transformLabelname(self): ...
 import lib.ast_comments as ast
 from lib.smallUtilities import dump, walkSmarter
 
-from csmp.precompiler.statementBase import Statement, StatementStatus, StatementLabels, ConstantDeclaration,\
+from csmp.precompiler.statementBase import Statement, StatementStatus, StatementCategory, ConstantDeclaration,\
     AssigningStatement, Varlist, BasicStatement, ExecutionControl
 from csmp.precompiler.lister import Lister
 from csmp import errors
@@ -24,13 +24,13 @@ def symbols():
 
 
 class CONSTANT(ConstantDeclaration):
-    cat = StatementLabels.constants
+    cat = StatementCategory.constants
 
 class PARAM(ConstantDeclaration):
-    cat = StatementLabels.parameters
+    cat = StatementCategory.parameters
 
 class INCON(ConstantDeclaration):
-    cat = StatementLabels.incons
+    cat = StatementCategory.incons
 
 
 
@@ -40,13 +40,13 @@ class INTGRL(AssigningStatement):
         super().__init__(node)
         init, rate = self.args[:2]
         self.transformations = {
-            StatementLabels.initStates:
+            StatementCategory.initStates:
                 self._nodeFromString(f"self.createStateVariable({self.index}, '{self.name}', {init}, {rate})"),
 
-            StatementLabels.restoreValues:
+            StatementCategory.restoreValues:
                 self._nodeFromString(f"{self.name} = self.getState({self.index})"),
         
-            StatementLabels.update:
+            StatementCategory.update:
                 self._nodeFromString(f"self.setCurrentRate({self.index}, {rate})")
                 }
         
@@ -56,7 +56,7 @@ class FUNCTION(AssigningStatement):
     def __init__(self, node):
         super().__init__(node)
         self.transformations = {
-            StatementLabels.functions:
+            StatementCategory.functions:
                 self._nodeFromString(f"self.createCsmpFunction({self.index}, '{self.name}', {self._allArgs()})")}
 
 
@@ -72,7 +72,7 @@ class FunctionGenerator(AssigningStatement):
     def __init__(self, node: ast.AST):
         super().__init__(node, -1)
         self.linkedFunction = -1
-        self.transformations = {StatementLabels.generators: None}
+        self.transformations = {StatementCategory.generators: None}
 
 
     def link(self, functions):
@@ -80,9 +80,9 @@ class FunctionGenerator(AssigningStatement):
         self.linkedFunction = functions.get(functionName, -99999)
         
     
-    def transform(self, category: StatementLabels):
+    def transform(self, category: StatementCategory):
         # transformation not valid before link is set
-        if category == StatementLabels.generators:
+        if category == StatementCategory.generators:
             args = self._kwdList() 
             return self._nodeFromString(f"self.create{self.className(1)}({self.index}, function = {self.linkedFunction}, {args})")
 
@@ -134,7 +134,7 @@ class MEMORY(AssigningStatement):
         super().__init__(node)
         declaration = self._createObject() 
         self.transformations = {
-            StatementLabels.memoryObjects:
+            StatementCategory.memoryObjects:
                 self._nodeFromString(declaration)
                 }
         
@@ -173,14 +173,14 @@ class DECK(Statement):
     status  = StatementStatus.not_supported
 
 
-class __OherStatement__(Statement):
+class __OtherStatement__(Statement):
     status  = StatementStatus.other
-class MACRO(__OherStatement__): pass 
-class INITIAL(__OherStatement__): pass 
-class DYNAMIC(__OherStatement__): pass 
-class TERMINAL(__OherStatement__): pass 
-class SORT(__OherStatement__): pass 
-class NOSORT(__OherStatement__): pass 
+class MACRO(__OtherStatement__): pass 
+class INITIAL(__OtherStatement__): pass 
+class DYNAMIC(__OtherStatement__): pass 
+class TERMINAL(__OtherStatement__): pass 
+class SORT(__OtherStatement__): pass 
+class NOSORT(__OtherStatement__): pass 
 
 
 class END(Statement):
@@ -205,7 +205,7 @@ class ENDJOB(Statement):
 
 # ENDJOB STACK
 class COMMON(Statement):
-    status  = StatementStatus.undecided
+    status  = StatementStatus.obsolete
 
 
 # COMMON MEM  
