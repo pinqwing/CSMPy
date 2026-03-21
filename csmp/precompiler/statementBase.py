@@ -7,6 +7,7 @@ import lib.ast_comments as ast
 from csmp import errors
 from csmp.precompiler.nodeWraps import NodeWrap
 from lib.smallUtilities import walkSmarter, dump
+import inspect
 
 
 class StatementStatus(Enum):
@@ -110,23 +111,14 @@ class StatementClass(NodeWrap): # TODO doubtfully distinct from Statement
         # register class:
         Statement.classes[cls.__name__] = cls
         
-        # initialize categories:
-        cls.categories = set()
-        for cat in StatementLabels:
-            if hasattr(cls, f"transform{cat.capitalize()}"):
-                cls.categories.add(cat)
-        
         if cls.status == StatementStatus.UNDEFINED:
-            cls.status = StatementStatus.OK if cls.categories else StatementStatus.not_yet_supported
+            cls.status = StatementStatus.OK if not "..." in inspect.getsource(cls)else StatementStatus.not_yet_supported 
 
 
-
-            
         
     
 class Statement(StatementClass):                   
     status      = StatementStatus.UNDEFINED
-    categories  = set()
     
 
     def __init__(self, node):
@@ -135,6 +127,8 @@ class Statement(StatementClass):
         self.args    = [ast.unparse(n) for n in node.args]
         self.kwargs  = [(k.arg, ast.unparse(k.value)) for k in node.keywords]
         self.targets = [p.id for p in walkSmarter(node.parent.targets[0], [ast.Name])] if isinstance(node.parent, ast.Assign) else []
+        self.transformations = {}
+        
         
     def __str__(self):
         pre  = "%04d" % self.getLineNumber()  
@@ -187,7 +181,8 @@ class Statement(StatementClass):
 
     def inplace(self):
         if self.status == StatementStatus.not_supported:
-            self.error(f"{self.className()} is not supported in CSMPy")
+            warn(f"{self.className()} is not supported in CSMPy")
+            return None
         
         if self.status == StatementStatus.ignored:
             warn(f"{self.className()} is ignored", category=SyntaxWarning)
@@ -205,23 +200,11 @@ class Statement(StatementClass):
 
 
     def transform(self, category: StatementLabels):
-        if not category in self.categories:
-            return self._errorWrap("EROR:", f"cannot transform {self.statement.name} to {category.name}")
-            # raise errors.ProgramError(f"cannot transform {self.statement.name} to {category.name}")
-        
-        methodName  = f"transform{category.capitalize()}"
-        method      = getattr(self, methodName, None)
-        if method is None:
-            raise errors.NotYetImplementedError(f"{self.className()}.{methodName}()")
-        
-        return method()
+        # do not shortcut this method, for overriding allows for late transformations
+        return self.transformations.get(category)
 
     
-    def error(self, msg):
-        self.addRemark(msg)
-        raise errors.PrecompilerError(msg)
-    
-    
+
 class BasicStatement(Statement):    
     
     def __init__(self, node):
@@ -257,6 +240,10 @@ class AssigningStatement(Statement):
     def transformInplace(self):
         return None
 
+    def transform(self, category: StatementLabels):
+        return self.transformations.get(category)
+        
+
 
     
 class ConstantDeclaration(AssigningStatement):
@@ -274,12 +261,14 @@ class ConstantDeclaration(AssigningStatement):
     make the names and values explicit; therefore the StatementCollector immediately splits
     such statements into their atomic form (a = CONSTANT(1); b = CONSTANT(2) ...)
     '''
-    
+    cat = StatementLabels.constants
+        
     def __init__(self, node):
         super().__init__(node, 1)
         # There's no in-place transformation and the call-format cannot be sorted.
         # Therefore, transform to destination right away:
         self.node = self._nodeFromString(self.toString())
+        self.transformations = {self.cat: self.node}
         
         
     def toString(self): # NOT __str__ !!
@@ -294,3 +283,24 @@ class ConstantDeclaration(AssigningStatement):
         return self.name
     
     
+
+class ExecutionControl(Statement):
+
+    def __init__(self, node):
+        super().__init__(node)
+        self.transformations = {
+            StatementLabels.systemParams:
+                self._nodeFromString(f"self.set{self.className(1)}({self._allArgs()})")
+                }
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            

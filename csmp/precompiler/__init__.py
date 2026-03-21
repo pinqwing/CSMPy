@@ -58,16 +58,11 @@ class Precompiler:
     def processCode(self):
         try:
             self.ast = self.loader.getSyntaxTree()
-        except SyntaxError as e:
-            Lister().addSyntaxErrorError(e, "the model contains syntax errors and could not be parsed", Lister.FINAL, "processCode")
-            return
-        
-        try:
             self.macroExpansion()
             Statement.setParentage(self.ast) # after macroSubstitution
             self.collectDeclarations()
             self.modelSegmentation()
-            self.assignStatements()
+            self.distributeRemainingStatements()
             self.writeCurrentSource(sorted = False)
             self.sort()
             self.writeCurrentSource(sorted = True)
@@ -75,6 +70,9 @@ class Precompiler:
             return True
         except PrecompilerError:
             Lister().addError("parsing of the source code failed", Lister.FINAL, "processCode")
+            return False
+        except SyntaxError as e:
+            Lister().addSyntaxErrorError(e, "the model contains syntax errors and could not be parsed", Lister.FINAL, "processCode")
             return False
 
     
@@ -101,19 +99,25 @@ class Precompiler:
                 else:
                     self.readOnly[name] = decl
                      
+        # imports are important to resolve external symbols:
         self.imports = ImportCollector().run(self.ast)
+        
+        # collect all statements from the model in a single list:
         allKwdNodes  = StatementCollector().run(self.ast)
             
+        # redistribute all statements by SatementLabels:
         for node in allKwdNodes:
-            for cat in node.categories:
+            for cat in node.transformations:
                 self.statementNodes[cat].append(node)
                 
+        # define selected assiggments as read-only after declaration:
         addReadOnly(self.statementNodes[StatementLabels.initStates])
         addReadOnly(self.statementNodes[StatementLabels.constants])
         addReadOnly(self.statementNodes[StatementLabels.parameters])
         addReadOnly(self.statementNodes[StatementLabels.incons])
         addReadOnly(self.statementNodes[StatementLabels.functions])
 
+        # link functino generators to their functions:
         functions = dict([(f.name, f.index) for f in self.statementNodes[StatementLabels.functions]])
         for gen in self.statementNodes[StatementLabels.generators]:
             gen.link(functions)
@@ -131,7 +135,7 @@ class Precompiler:
                  
                     
     @Lister.withContextError
-    def assignStatements(self):
+    def distributeRemainingStatements(self):
         for node in self.ast.body:
             statement = NodeWrap(node)
             line      = statement.getLineNumber()

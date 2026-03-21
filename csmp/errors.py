@@ -37,8 +37,9 @@ class MacroError(PrecompilerError):
 
 
 class NotYetImplementedError(PrecompilerError):
-    def __init__(self):
-        caller = inspect.stack()[1][3]
+    def __init__(self, caller = None):
+        if caller is None:
+            caller = inspect.stack()[1][3]
         super().__init__("function '%s' has not been implemented yet" % caller)
 
 

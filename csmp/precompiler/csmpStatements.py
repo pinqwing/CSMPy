@@ -14,74 +14,50 @@ import lib.ast_comments as ast
 from lib.smallUtilities import dump, walkSmarter
 
 from csmp.precompiler.statementBase import Statement, StatementStatus, StatementLabels, ConstantDeclaration,\
-    AssigningStatement, Varlist, BasicStatement
+    AssigningStatement, Varlist, BasicStatement, ExecutionControl
 from csmp.precompiler.lister import Lister
 from csmp import errors
+from unicodedata import category
 
 def symbols():
     return [n for n in globals() if n == n.upper() and not n.startswith("_") ]
 
 
 class CONSTANT(ConstantDeclaration):
-    def transformConstants(self):
-        return self.node
-
+    cat = StatementLabels.constants
 
 class PARAM(ConstantDeclaration):
-    def transformParameters(self):
-        return self.node
-
+    cat = StatementLabels.parameters
 
 class INCON(ConstantDeclaration):
-    def transformIncons(self):
-        return self.node
+    cat = StatementLabels.incons
 
-
-
-# class INTGRL(AssigningStatement):
-#
-#     def __init__(self, node):
-#         super().__init__(node, 1)
-#         init, rate = self.args[:2]
-#         self.transformations = {
-#             StatementLabels.initStates:
-#                 self._nodeFromString(f"self.createStateVariable({self.index}, '{self.name}', {init}, {rate})"),
-#
-#             StatementLabels.restoreValues:
-#                 self._nodeFromString(f"{self.name} = self.getState({self.index})"),
-#
-#             StatementLabels.update:
-#                 self._nodeFromString(f"self.setCurrentRate({self.index}, {rate})")
-#                 }
-#
-#
-#     def transform(self, category: StatementLabels):
-#         return self.transformations.get(category)
-#
 
 
 class INTGRL(AssigningStatement):
-    
-    def transformInitStates(self):
-        args = self._argList() 
-        return self._nodeFromString(f"self.createStateVariable({self.index}, '{self.name}', {args})")
 
-        
-    def transformRestoreValues(self):
-        return self._nodeFromString(f"{self.name} = self.getState({self.index})")
-        
-        
-    def transformUpdate(self):
-        rate = self.args[1]
-        return self._nodeFromString(f"self.setCurrentRate({self.index}, {rate})")
-        
-        
+    def __init__(self, node):
+        super().__init__(node)
+        init, rate = self.args[:2]
+        self.transformations = {
+            StatementLabels.initStates:
+                self._nodeFromString(f"self.createStateVariable({self.index}, '{self.name}', {init}, {rate})"),
 
+            StatementLabels.restoreValues:
+                self._nodeFromString(f"{self.name} = self.getState({self.index})"),
+        
+            StatementLabels.update:
+                self._nodeFromString(f"self.setCurrentRate({self.index}, {rate})")
+                }
+        
+        
 class FUNCTION(AssigningStatement):
 
-    def transformFunctions(self):
-        args = self._allArgs() 
-        return self._nodeFromString(f"self.createCsmpFunction({self.index}, '{self.name}', {args})")
+    def __init__(self, node):
+        super().__init__(node)
+        self.transformations = {
+            StatementLabels.functions:
+                self._nodeFromString(f"self.createCsmpFunction({self.index}, '{self.name}', {self._allArgs()})")}
 
 
 
@@ -96,20 +72,23 @@ class FunctionGenerator(AssigningStatement):
     def __init__(self, node: ast.AST):
         super().__init__(node, -1)
         self.linkedFunction = -1
+        self.transformations = {StatementLabels.generators: None}
+
 
     def link(self, functions):
         functionName = self.args[0]
         self.linkedFunction = functions.get(functionName, -99999)
         
     
-    def transformGenerators(self):
-        args = self._kwdList() 
-        return self._nodeFromString(f"self.create{self.className(1)}({self.index}, function = {self.linkedFunction}, {args})")
+    def transform(self, category: StatementLabels):
+        # transformation not valid before link is set
+        if category == StatementLabels.generators:
+            args = self._kwdList() 
+            return self._nodeFromString(f"self.create{self.className(1)}({self.index}, function = {self.linkedFunction}, {args})")
 
         
     def transformInplace(self):
         arg = self.args[1] 
-        # return self._nodeFromString(f"{self.name} = self.funcGenerators[{self.index}].getValue({arg})")
         return self._nodeFromString(f"self.funcGenerators[{self.index}].getValue({arg})").value
 
 
@@ -153,7 +132,11 @@ class MEMORY(AssigningStatement):
     
     def __init__(self, node, *args, **kwargs):
         super().__init__(node)
-        self._declaration = self._createObject() # for early error detection
+        declaration = self._createObject() 
+        self.transformations = {
+            StatementLabels.memoryObjects:
+                self._nodeFromString(declaration)
+                }
         
         
     def _createObject(self):
@@ -169,18 +152,15 @@ class MEMORY(AssigningStatement):
         call    = f"self.create{self.className(1)}Function"
         return f"{call}({self.index}, call = {self.args[0]}, initial = {self.args[1]})"
 
-
-    def transformMemoryObjects(self):
-        return self._nodeFromString(self._declaration)
-    
         
     def transformInplace(self):
         call = f"self.{self.className(2)}Function"
         return self._nodeFromString(f"{call}[{self.index}]({self._argList()})").value
 
 
-class HISTORY(Statement):
-    ...
+
+class HISTORY(MEMORY):
+    pass
 
 
 
@@ -232,10 +212,6 @@ class COMMON(Statement):
 class DATA(Statement):
     status  = StatementStatus.obsolete
 
-
-# Execution control statements:
-class ExecutionControl(BasicStatement):
-    pass
 
 class TIMER(ExecutionControl):
     pass
@@ -293,9 +269,9 @@ registerAndInitializeStatements()
 
 
 if __name__ == '__main__':
-    import re
+    import re, inspect
     
     for c in Statement.classes.values():
-        print(c.className(1), "-->", c.status)
+        print("%-10s" % c.className(1), "-->", c.status.name)
         
     

@@ -56,7 +56,7 @@ class StatementCollector(ast.NodeTransformer):
         stmtClass = Statement[statement.fName]
         for name, value in statement.kwargs:
             newNode = statement._nodeFromString(f"{name} = {statement.fName}({value})")
-            self.statements.append(stmtClass(newNode.value))
+            self.addStatement(stmtClass(newNode.value))
             result.append(newNode)
         return None
             
@@ -66,6 +66,10 @@ class StatementCollector(ast.NodeTransformer):
         if statementClass is not None:
             if  issubclass(statementClass, ConstantDeclaration):
                 return self.breakUpCompoundStatement(node.value)
+            else:
+                statement = statementClass(node.value)
+                self.addStatement(statement)
+                return statement.transformInplace()
         return node
         
 
