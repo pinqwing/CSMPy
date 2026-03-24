@@ -274,7 +274,7 @@ RESET       PRINT, PRTPLOT, FINISH          * not supported *
 ======================================== ========================================
 new syntax
 ======================================== ========================================
-PRINT(X, XDOT, ALT)
+PRINT(X, XDOT, ALT [, format = (<colWidth>,<decimals>)])
 TITLE("PROBLEM DESCRIPTION")
 PREPARE(DIST, VELOC)
 PRTPLOT(...)
