@@ -1,9 +1,9 @@
 import inspect
 import itertools
 from io import StringIO
+import lib.ast_comments as ast
 from pathlib import Path
 
-import lib.ast_comments as ast
 from csmp import errors
 
 
@@ -29,9 +29,6 @@ class TemplateBuilder(ast.NodeTransformer):
         
         self.segmentComment = segmentComment if segmentComment is not None else "--- {0}: ----------" 
         self.placeholders   = placeholders   if placeholders   is not None else ":{0}:"
-        # change name of class in template
-        self.code.body[0].name  = self.code.body[0].name.replace("Template", "")
-        
         
     
     def replace(self, label, items: list, keepLabel = True):
@@ -80,11 +77,12 @@ class TemplateBuilder(ast.NodeTransformer):
         with template.open("r") as t:
             return self.loadString(t.read())
         
-            
+
     def loadString(self, source):
-        matches = []
+        matches = [] # list of matching classes found in the source
         try:
             tree = ast.parse(source)
+            return tree
         except SyntaxError as e:
             if Path(source).exists():
                 raise errors.ProgramError(f"{source} appears to be a path but was passed as string")
@@ -94,16 +92,7 @@ class TemplateBuilder(ast.NodeTransformer):
         except Exception as e:
             raise errors.PrecompilerError(e.args)
         
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef):
-                parentage = [b.id == "CSMP_Model" for b in node.bases]
-                if any(parentage):
-                    matches.append(node)
-                
-        if len(matches) == 1:
-            return matches[0]
-        
-        raise errors.PrecompilerError("template must contain exactly one model class (direct descendant of CSMP_Model)")
+    
 
     # # extra prox to run the created program TODO: NYUsed
     # def getClass(self, **compilerArgs):    
@@ -120,22 +109,3 @@ class TemplateBuilder(ast.NodeTransformer):
 
 
 
-        
-        
-if __name__ == '__main__':
-    import sys
-    # from templates.simulationModelTemplate import SimulationModelTemplate
-    from csmp.precompiler.keywordsBase import KeywordLabels
-    from pathlib import Path
-    
-    # tpl     = SimulationModelTemplate
-    tpl     = Path("../../templates/simulationModelTemplate.py")
-    src     = "a = 1\nb = 2\nc = 'character'\n"
-    subst   = ast.parse(src)
-    b       = TemplateBuilder(tpl, segmentComment=" ### {} ###")
-    b.replace(KeywordLabels.parameters, subst, keepLabel=True)
-    b.write(sys.stdout)
-
-    
-    
-    

@@ -1,7 +1,7 @@
-from math import floor, ceil, log2
-from csmp.errors import SimulationError
-from _warnings import warn
 import numpy
+from math import floor, ceil, log2
+from warnings import warn
+from csmp.errors import SimulationError
 
 
 class WaitstateCounter:
@@ -58,8 +58,6 @@ class EventQueue(list):
             self.pop(0)
         
         
-
-
 # DELT. The value of DELT is the integration interval or step-size of the indepen-
 # dent variable. If DELT is specified, it is automatically adjusted if necessary to be a
 # submultiple of PRDEL or OUTDEL. If neither PRDEL or OUTDEL has been
@@ -74,7 +72,7 @@ WAITSTATES  = 5 # nr of time steps to wait between step increments
 calcDelt    = lambda base, exp: base / 2**exp
 
 
-class Timer:
+class BaseTimer:
     
     def __init__(self, FINTIM, PRDEL = -1, OUTDEL = -1, DELT = -1, DELMIN = -1, TIME = 0):
         if PRDEL > FINTIM:  
@@ -98,32 +96,26 @@ class Timer:
         if DELMIN > self.prDel:  raise SimulationError("DELMIN > PRDEL")
         if DELMIN > self.outDel: raise SimulationError("DELMIN > OUTDEL")
         
-        self.delMax, \
-        self._shiftDel      = self._initialDelt(DELT)
-        self._currentDelt   = 0 
-        self._incrWait      = WaitstateCounter(WAITSTATES)
+        self._specifiedDelt = DELT
+        self._currentDelt   = DELT
         self.stepCount      = 0
         
-        
-    def _initialDelt(self, specifiedDelt):    
-        target      = min(self.prDel, self.outDel)
-        start       = specifiedDelt if specifiedDelt > 0 else target / 16
-        shiftExp    = max(0, ceil(log2(target / start)))
-        
-        
-        while calcDelt(target, shiftExp) < self.delMin:
-            if shiftExp <= 0:
-                raise SimulationError("cannot adjust DELT due to DELMIN")
-            shiftExp -= 1
-        
-        return target, shiftExp
-        
     
+    def clone(self, newTimerClass):
+        return newTimerClass(FINTIM = self.finTim,
+                              PRDEL = self.prDel,  
+                             OUTDEL = self.outDel, 
+                               DELT = self._specifiedDelt,
+                             DELMIN = self.delMin,
+                               TIME = self.time)
+                    
+                    
     def __str__(self):
-        return f"time = {self.time}; delt = {self.delt}; final = {self.finTim}; step = {self.stepCount}"
+        name = type(self).__name__.replace("StepTimer", "")
+        return f"time = {self.time}; delt = {self.delt}; final = {self.finTim}; step = {self.stepCount} [{name}]"
     
             
-    def getDelt(self):
+    def nextStepSize(self):
         if self.time > self.finTim:
             return numpy.nan
         
@@ -133,23 +125,14 @@ class Timer:
                         (self._prnTimes.get(default = self.finTim), 
                          self._outTimes.get(default = self.finTim),
                          self.finTim, regularNext) if event > self.time]
-        return min(numpy.array(mileStones) - self.time)
+        return min(numpy.array(mileStones) - self.time)  
     
-    
-    def _updateDelt(self):
-        # store delt as it is now onto _currentDelt
-        self._currentDelt = self.getDelt() 
-
-        
-    delt = property(lambda t: t._currentDelt)
-        
     
     def start(self):
         self.stepCount      = 0
         self.time           = 0.0
         self._outTimes      = EventQueue(self.outDel, self.finTim, overshoot = 2)
         self._prnTimes      = EventQueue(self.prDel, self.finTim, overshoot = 2)
-        self._updateDelt()
     
     
     def next(self):
@@ -162,12 +145,6 @@ class Timer:
         self._prnTimes.purge(pastEvents)
         self._outTimes.purge(pastEvents)
     
-        # determine delt for the upcoming time step: 
-        self._updateDelt()
-        
-        # decrease increment-wait states:
-        self._incrWait.pop()
-        
         # returt True while not done:
         return self.time < self.finTim
     
@@ -184,6 +161,70 @@ class Timer:
         return self.time >= self._prnTimes.get(self.finTim)
     
     
+class FixedStepTimer(BaseTimer):
+    @property
+    def delt(self):
+        return self._specifiedDelt
+    
+    @delt.setter
+    def delt(self, value):   
+        self._specifiedDelt = value
+        
+
+class VariableStepTimer(BaseTimer):
+    
+    def __init__(self, FINTIM, PRDEL=-1, OUTDEL=-1, DELT=-1, DELMIN=-1, TIME=0):
+        super().__init__(FINTIM, PRDEL, OUTDEL, DELT, DELMIN, TIME)
+        self.delMax, \
+        self._shiftDel      = self._initialDelt(DELT)
+        self._currentDelt   = 0 
+        self._incrWait      = WaitstateCounter(WAITSTATES)
+        
+        
+    @property
+    def delt(self):
+        return self._currentDelt
+    
+    @delt.setter        
+    def delt(self, value):
+        raise AttributeError(f"property 'delt' of '{type(self).__name__}' is managed and cannot be set")
+
+        
+    def _initialDelt(self, _specifiedDelt):    
+        target      = min(self.prDel, self.outDel)
+        start       = _specifiedDelt if _specifiedDelt > 0 else target / 16
+        shiftExp    = max(0, ceil(log2(target / start)))
+        
+        
+        while calcDelt(target, shiftExp) < self.delMin:
+            if shiftExp <= 0:
+                raise SimulationError("cannot adjust DELT due to DELMIN")
+            shiftExp -= 1
+        
+        return target, shiftExp
+        
+    
+    def _updateDelt(self):
+        # store delt as it is now onto _currentDelt
+        self._currentDelt = self.nextStepSize() 
+
+
+    def start(self):
+        super().start()
+        self._updateDelt()
+    
+    
+    def next(self):
+        finished = super().next()    
+        # determine delt for the upcoming time step: 
+        self._updateDelt()
+        # decrease increment-wait states:
+        self._incrWait.pop()
+        return finished
+    
+    
+        
+        
     def decreaseTimestep(self):
         # halve the timestep by increasing shiftDel
         if calcDelt(self.delMax, self._shiftDel + 1) < self.delMin:
@@ -210,7 +251,16 @@ class Timer:
 
 
 
+
+
 if __name__ == '__main__':
     
-    t = Timer(FINTIM = 100, PRDEL = 10, OUTDEL = 5, DELT = 3)
+    t = FixedStepTimer(FINTIM = 100, PRDEL = 10, OUTDEL = 5, DELT = 3)
+    print(t)
     print(t.delt)
+    t.delt = 0
+    
+    t = VariableStepTimer.cloned(t)
+    print(t)
+    print(t.delt)
+    t.delt = 0

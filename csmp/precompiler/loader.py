@@ -21,6 +21,10 @@ class ModelLoader:
         except: pass
         
         self.folder = self.createOutputDirectory()
+        self.source = path
+        
+    modelName   = property(lambda p: p.getFilepath("").name) 
+    runnable    = property(lambda p: p.getFilepath(".py").absolute())  
             
             
     def createOutputDirectory(self):

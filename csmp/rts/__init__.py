@@ -4,9 +4,11 @@ from itertools import zip_longest
 import lib.ast_comments as ast
 
 from csmp.rts.csmpFunction import Csmp_AfGen, Csmp_Function, Csmp_NlfGen
+from csmp.rts.integrator import StateVariable, RungeKuttaSimpson
 from csmp.rts.model import Printer
-from csmp.rts.integrator import Rect, StateVariable
-from csmp.rts.timer import Timer
+from csmp.rts.timer import BaseTimer, FixedStepTimer, VariableStepTimer
+
+from csmp.customTypes import IntegrationMethod
 
 
 class NormalFinish(StopIteration):
@@ -18,6 +20,9 @@ class NormalFinish(StopIteration):
 class CSMP_Model(ABC):
 
     @abstractmethod
+    def setUp(self):                ...
+
+    @abstractmethod
     def defineConstants(self):      return {}
     
     @abstractmethod
@@ -27,23 +32,23 @@ class CSMP_Model(ABC):
     def initial(self):              return {}
         
     @abstractmethod
-    def loop(self, time):           return
+    def loop(self, TIME, DELT, KEEP = True):           ...
         
     @abstractmethod
-    def final(self):                return
+    def final(self):                ...
         
 
     
     def __init__(self):
         self.title          = 'simulation'
-        self.timer          = Timer(10.)
+        self.timer          = BaseTimer(10.)
+        self.setMethod(IntegrationMethod.RKS)
         self.globals        = {}
         self.functionBlocks = {} # by both index & name
         self.funcGenerators = {} # by both index & name
         self.ratesEtc       = {} # local variables from DYNAMIC
         self.stateVars      = {} # by index
         self.stateNames     = {} # by name
-        self.integrator     = Rect(self)
         self.printer        = Printer()
         self.finished       = False
         
@@ -66,14 +71,19 @@ class CSMP_Model(ABC):
 
     def printEvent(self):
         prVars = dict([(name, self.getVariable(name)) for name in self.printer.varNames])
+        prVars["TIME"] = self.timer.time
         self.printer.print(self.timer.time, prVars)
+        
         
     def run(self):
         # self.endConditions.append(EndCondition("RES", 450, ">="))
+        self.setUp()
+        self.integrator.initialize()
+        
         print(self.title)
         self.timer.start()
         self.printer.printHeader()
-        self.ratesEtc.update(self.loop(0))
+        self.ratesEtc.update(self.loop(self.timer.time, self.timer.delt))
         
         try:
             lastPrt = -1
@@ -89,7 +99,6 @@ class CSMP_Model(ABC):
                     raise NormalFinish(self.finished)
                 
                 if self.timer.simulationComplete():                
-                    self.loop(self.timer.time)
                     raise NormalFinish(f"time >= {self.timer.finTim}")
                 
                 self.integrator.run()
@@ -146,14 +155,19 @@ class CSMP_Model(ABC):
         
     def setTimer(self, **params):
         try:
-            self.timer = Timer(**params)
+            self.timer = type(self.timer)(**params)
         except RuntimeError as rte:
             rte.args = ("%s in setTimer() (%s)" % rte.args,)
             raise 
     
             
     def setMethod(self, integrationMethod):
-        pass
+        if isinstance(integrationMethod, str):
+            integrationMethod = IntegrationMethod[integrationMethod]
+        self.integrator =  integrationMethod.value(self)
+        # new timer class:
+        ntc = VariableStepTimer if self.integrator.variableTimeSteps() else FixedStepTimer
+        self.timer = self.timer.clone(ntc)
     
     
     def setPrint(self, *varNames):

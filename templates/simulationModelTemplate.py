@@ -1,7 +1,7 @@
 from csmp.rts import CSMP_Model
 
 
-class SimulationModelTemplate(CSMP_Model):
+class SimulationModel(CSMP_Model):
     
     def defineConstants(self):
         ' -/- '
@@ -39,7 +39,7 @@ class SimulationModelTemplate(CSMP_Model):
         return locals()
         
         
-    def loop(self, time):
+    def loop(self, TIME, DELT, KEEP = True):
         """
         Called each time step and also in between,
         if the integration method requires so.

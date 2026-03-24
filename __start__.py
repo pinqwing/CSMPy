@@ -9,5 +9,7 @@ if __name__ == '__main__':
     
     csmp = CSMPy()        
     csmp.compile("./models/test.csm.py")
+    if csmp.compiled:
+        csmp.run()
+        
     
-    print("\n", '-'*80, '\n')

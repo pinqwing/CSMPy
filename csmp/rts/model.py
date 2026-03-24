@@ -29,30 +29,21 @@ class Printer:
           too many columns could be passed to subsequent print blocks.
     '''
     
-    def __init__(self, varNames = []):
-        self.varNames = varNames
+    def __init__(self, varNames = [], format = "{:>18.4f}"):
+        self.formats  = ["{:>8.4f}"] + [format] * len(varNames) 
+        self.varNames = ["TIME"   ] + list(varNames)
     
     
     def printHeader(self):
-        def printHdr(name):
-            print("{:>12}".format(name), end = "")
-        
-        print("{:>8.4}".format("TIME"), end = "")
-        for name in self.varNames:
-            printHdr(name)
+        for name, fmt  in zip(self.varNames, self.formats):
+            print(fmt.replace("f}", "}").format(name), end = "")
         print()
             
         
     def print(self, time, values):
-        def printVar(name):
+        for name, fmt  in zip(self.varNames, self.formats):
             x = values.get(name, -99999)
-            print("{:>12.8f}".format(x), end = "")
-            # print("%12g" % x, end = "")
-        
-        print("{:>8.4E}".format(time), end = "")
-        # print("%8.4E" % time, end = "")
-        for name in self.varNames:
-            printVar(name)
+            print(fmt.format(x), end = "")
         print()
             
     

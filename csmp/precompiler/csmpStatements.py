@@ -50,7 +50,7 @@ class INTGRL(AssigningStatement):
         init, rate = self.args[:2]
         self.transformations = {
             StatementCategory.initStates:
-                self._nodeFromString(f"self.createStateVariable({self.index}, '{self.name}', {init}, {rate})"),
+                self._nodeFromString(f"self.createStateVariable({self.index}, '{self.name}', {init})"),
 
             StatementCategory.restoreValues:
                 self._nodeFromString(f"{self.name} = self.getState({self.index})"),

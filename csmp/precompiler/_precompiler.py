@@ -1,4 +1,5 @@
 from collections import defaultdict
+from pathlib import Path
 
 import lib.ast_comments as ast
 from csmp.errors import PrecompilerError, SegmentationError
@@ -13,10 +14,10 @@ from csmp.precompiler.sorter import Sorter
 from csmp.precompiler.statementBase import StatementCategory, Statement
 
 
-class CSMP_Source:
+class CSMP_Source(ModelLoader):
     
-    def __init__(self, loader: ModelLoader):
-        self.loader         = loader
+    def __init__(self, sourceFile: str | Path):
+        super().__init__(sourceFile)
         self.imports        = []
         self.init           = []
         self.segments       = ModelSegments(ast.parse("#"))
@@ -27,7 +28,7 @@ class CSMP_Source:
     incons  = property(lambda p: p.statements[StatementCategory.incons])
     states  = property(lambda p: p.statements[StatementCategory.initStates])
     # fundefs = property(lambda p: p.statementNodes[StatementCategory.functions]) TOD: more read-onlies?
-        
+    
         
 
 class Precompiler:
@@ -39,8 +40,7 @@ class Precompiler:
     
     def compile(self, sourceFile):
         self.reset()
-        self.loader     = ModelLoader(sourceFile)
-        self.model      = CSMP_Source(self.loader)
+        self.model      = CSMP_Source(sourceFile)
         self.fileHelper = PrecompilerOutput(self.options, self.model)
         
         self.processCode()
@@ -62,7 +62,7 @@ class Precompiler:
 
     def processCode(self):
         try:
-            self.ast = self.loader.getSyntaxTree()
+            self.ast = self.model.getSyntaxTree()
             self.macroExpansion()
             Statement.setParentage(self.ast) # after macroSubstitution
             self.collectDeclarations()
@@ -71,7 +71,7 @@ class Precompiler:
             self.fileHelper.writeCurrentSource("unsorted.lst")
             self.sort()
             self.fileHelper.writeCurrentSource("sorted.lst")
-            self.fileHelper.writeRunnable("runnableModel.py")
+            self.fileHelper.writeRunnable(self.model.runnable.name)
             
             return True
         except PrecompilerError:

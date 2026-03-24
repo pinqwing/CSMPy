@@ -19,7 +19,7 @@ class PrecompilerOutput:
     def __init__(self, options, model):
         self.options    = options
         self.model      = model
-        self.path       = Path(model.loader.folder)
+        self.path       = Path(model.folder)
     
 
     def _getFile(self, file):
@@ -27,7 +27,9 @@ class PrecompilerOutput:
             return sys.stdout
         
         if isinstance(file, str) or isinstance(file, Path):
-            return (self.path / file).open("w")
+            file = (self.path / Path(file).name) # force into output path
+            print(f"writing file {file}")
+            return file.open("w")
         
         return file
     
@@ -35,7 +37,7 @@ class PrecompilerOutput:
     @Lister.withContextError
     def writeListfile(self, file = "", summary = False):
         file = self._getFile(file)
-        Lister().report(self.model.loader.getSource(), file = file, onlyMarkedLines = summary)
+        Lister().report(self.model.getSource(), file = file, onlyMarkedLines = summary)
         print("%8d error(s)\n%8d warning(s)" % Lister().count(), file = file)
         
         
@@ -53,7 +55,7 @@ class PrecompilerOutput:
     @Lister.withContextError
     def writeSummary(self, file = ""):
         file = self._getFile(file)
-        modelFileName       = self.model.loader.file
+        modelFileName       = self.model.file
         errors, warnings    = Lister().count()
         completed           = "succesfully completed" if errors == 0 else "failed"
         stateVars           = ", ".join([v.name for v in sorted(self.model.states, key = lambda n: n.name)])

@@ -1,18 +1,17 @@
 from enum import Enum
+from csmp.rts import integrator
 
 
 class IntegrationMethod(Enum):
         
-    ADAMS   = "Second-order Adams integration with fixed interval"
-    CENTRL  = "A dummy routine that may be replaced by a user-supplied centralized " + \
-              "integration subroutine, if desired"
-    MILNE   = "Variable-step, fifth-order, predictor-corrector Milne integration method"
-    RECT    = "Rectangular integration"
-    RKS     = "Fourth-order Runge-Kutta with variable integration interval; " + \
-              "Simpson's Rule used for error estimation"
-    RKSFX   = "Fourth-order Runge-Kutta with fixed interval"
-    SIMP    = "Simpson's Rule integration with fixed integration interval"
-    TRAPZ   = "Trapezoidal integration"  
+    ADAMS   = integrator.Adams2ndOrder
+    CENTRL  = None
+    MILNE   = None
+    RECT    = integrator.Rect
+    RKS     = integrator.RungeKuttaSimpson
+    RKSFX   = integrator.RungeKutta4thOrder
+    SIMP    = integrator.Simpson
+    TRAPZ   = integrator.Trapz   
     
     
 class VarType(Enum):

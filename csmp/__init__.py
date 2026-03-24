@@ -17,6 +17,8 @@ from lib.settings import Settings
 from lib.options import Options
 from lib import options
 from csmp.precompiler import Precompiler
+from csmp import errors
+import importlib
 
 def simpleWarning(message, category, filename, lineno, line=None):
     return f"{category.__name__}: {message}\n"
@@ -85,12 +87,41 @@ class CSMPy:
     def compile(self, model):
         self.compiled = False
         self.complete = False
-        mdl = Precompiler(self.options)
-        mdl.compile(model)
-        self.compiled = mdl.succes
-        self.model    = mdl
+        prc = Precompiler(self.options)
+        prc.compile(model)
+        self.compiled = prc.succes
+        self.source   = prc.model # a model description really
         
         
+    def run(self):
+        if not self.compiled:
+            raise errors.ModelError("precompiler was not succesful")
         
+        self.complete   = False
+        module          = self.loadModel(self.source)
+        modelClass      = self.findModelClass(module)
+        model           = modelClass()
+        model.run()
+        self.complete   = True
+        
+        
+    def loadModel(self, source):
+        fileName = str(source.runnable)
+        unitName = source.runnable.stem
+        print(f"running {fileName} ({unitName})\n\n")
+        spec    = importlib.util.spec_from_file_location(unitName, fileName)
+        module  = importlib.util.module_from_spec(spec)
+        sys.modules[unitName] = module
+        spec.loader.exec_module(module)
+        return module        
+
+        
+    def findModelClass(self, module):
+        for n, v in vars(module).items():
+            if n.startswith("_"): continue
+            if isinstance(v, type):
+                if issubclass(v, CSMP_Model) and (v != CSMP_Model):
+                    return v
+        raise errors.ProgramError("no subclass of CSMP_Model found")
         
         

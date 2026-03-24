@@ -1,6 +1,8 @@
 import numpy
 from functools import partial
 
+FIXED, VARIABLE = (False, True)
+
 
 class StateVariable:
     
@@ -20,6 +22,7 @@ class StateVariable:
         self.mapIndex   = position
         self.setValue(self._value)
         self.setRate(self._rate)
+
 
     def isMapped(self):
         return self.mapIndex >= 0
@@ -65,26 +68,31 @@ class StateVariables:
 
 
 class Integrator: 
-
-    def __init__(self, model, storage: StateVariables = None):
+    _TS_ = VARIABLE
+    
+    def __init__(self, model):
         self.model       = model
-        self.timer       = model.timer
-        self.storage     = storage
+        self.timer       = None
+        self.storage     = None
         self.isMajorStep = True
         
     KEEP = property(lambda i: 1 if i.isMajorStep else 0) # TODO: make available to the model
     
-        
     def getStates(self):            return self.storage.states    
     def getRates(self):             return self.storage.rates
     def setStates(self, states):    self.storage.states = states     
     def setRates(self,  rates):     self.storage.rates  = rates     
     states = property(getStates, setStates)
     rates  = property(getRates,  setRates)
-        
+
+
+    def variableTimeSteps(self):
+        return self._TS_
+    
         
     def initialize(self):  
         self.storage = StateVariables(self.model) 
+        self.timer   = self.model.timer # (may have changed since construction)
         
 
     def run(self):
@@ -136,15 +144,20 @@ class Integrator:
 
 
 class Rect(Integrator):
+    """Rectangular integration"""
+    _TS_ = FIXED
     
     def run(self):
         self.recalculateRates(self.timer.time)
-        self.states += self.timer.delt * self.rates
+        delt         = self.timer.delt 
+        self.states += delt * self.rates
 
 
     
 
 class Trapz(Integrator):
+    """Trapezoidal integration"""
+    _TS_ = FIXED
 
     def run(self):
         Yt = self.copyStates()
@@ -154,7 +167,9 @@ class Trapz(Integrator):
 
         
         
-class Adams2ndOrder(Integrator):        
+class Adams2ndOrder(Integrator):   
+    """Second-order Adams integration with fixed interval"""     
+    _TS_ = FIXED
 
     def run(self):
         Yt = self.copyStates()
@@ -165,6 +180,8 @@ class Adams2ndOrder(Integrator):
         
     
 class RungeKutta4thOrder(Integrator):
+    """Fourth-order Runge-Kutta with fixed interval"""
+    _TS_ = FIXED
         
     def run(self):
         delt = self.timer.delt
@@ -195,6 +212,8 @@ class RungeKutta4thOrder(Integrator):
 
             
 class Simpson(Integrator):
+    """Simpson's Rule integration with fixed integration interval"""
+    _TS_ = FIXED
 
 
     def run(self):
@@ -216,6 +235,10 @@ class Simpson(Integrator):
             
             
 class RungeKuttaSimpson(RungeKutta4thOrder):
+    """ Fourth-order Runge-Kutta with variable integration interval; 
+        Simpson's Rule used for error estimation"""
+    _TS_ = VARIABLE
+    
     ABSERR      = 0.0001 # 0.001 according to the 1971 manual
     RELERR      = 0.0001
     ERROR_LIMIT = 1./32, 1.
@@ -282,8 +305,12 @@ class RungeKuttaSimpson(RungeKutta4thOrder):
                 self.states = Yt # Reset
                 self.run() 
         
-        
-        
+
+# TODO:        
+CENTRL  = "A dummy routine that may be replaced by a user-supplied centralized " + \
+              "integration subroutine, if desired"
+MILNE   = "Variable-step, fifth-order, predictor-corrector Milne integration method"
+            
         
         
          
