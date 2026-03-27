@@ -14,7 +14,7 @@ class StatementCollector(ast.NodeTransformer):
         def visit_Expr(self, node):
             if ("value" in node._fields) and isinstance(node.value, ast.Call):
                 statementClass = Statement[node.value.func.id]
-                if issubclass(statementClass, ConstantDeclaration):
+                if (statementClass is not None) and issubclass(statementClass, ConstantDeclaration):
                     return statementClass.breakUp(node.value)
             return node
         
@@ -40,11 +40,11 @@ class StatementCollector(ast.NodeTransformer):
         # convert Statements:
         self.visit(tree)
         
-        # it is hard to remove parent nodes while in vistit, so instead
+        # it is hard to remove parent nodes while in visit, so instead
         # the lines have been marked for later removal:
         linesToRemove = [b for b in tree.body if any([node is self.delendus for node in ast.walk(b)])]
         for line in linesToRemove:
-            tree.body.remove(line)
+            tree.body.remove(line) # TODO: won't work fiith grouping into functions
             
         return self.statements
         

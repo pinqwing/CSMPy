@@ -4,7 +4,6 @@ import re, sys
 from abc import ABC, abstractmethod
 from itertools import zip_longest
 
-from csmp.rts.csmpFunction import Csmp_Function, Csmp_AfGen, Csmp_NlfGen
 
 
 # class EndCondition: elegant, but too simple
@@ -55,7 +54,7 @@ class Printer:
             try:
                 print(ffmt.format(x), end = "")
             except:
-                print(sfmt.format(x))
+                print(sfmt.format(str(x)))
         print()
             
     

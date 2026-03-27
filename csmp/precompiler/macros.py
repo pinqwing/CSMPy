@@ -3,7 +3,7 @@ import lib.ast_comments as ast
 import copy
 
 from csmp.errors import MacroError
-from lib.smallUtilities import unindent, dump
+from lib.smallUtilities import unindent
 
 
 

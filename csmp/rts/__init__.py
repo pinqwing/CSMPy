@@ -3,12 +3,14 @@ from abc import ABC, abstractmethod
 from itertools import zip_longest
 import lib.ast_comments as ast
 
-from csmp.rts.csmpFunction import Csmp_AfGen, Csmp_Function, Csmp_NlfGen
+from csmp.rts.csmpFunction import Csmp_Afgen, Csmp_Function, Csmp_Nlfgen
 from csmp.rts.integrator import StateVariable, RungeKuttaSimpson
 from csmp.rts.model import Printer
 from csmp.rts.timer import BaseTimer, FixedStepTimer, VariableStepTimer
 
 from csmp.customTypes import IntegrationMethod
+from lib.smallUtilities import ConservativeDict
+from csmp.rts.history import MemoryFunction
 
 
 class NormalFinish(StopIteration):
@@ -45,15 +47,21 @@ class CSMP_Model(ABC):
         self.setMethod(IntegrationMethod.RKS)
         self.globals        = {}
         self.functionBlocks = {} # by both index & name
-        self.funcGenerators = {} # by both index & name
+        self.funcGenerators = self.functionBlocks
+        self.csmpElements   = ConservativeDict() # by index
         self.ratesEtc       = {} # local variables from DYNAMIC
         self.stateVars      = {} # by index
         self.stateNames     = {} # by name
         self.aliases        = {} # inverse of printer.aliases
         self.printer        = Printer()
         self.finished       = False
+        self.functionBlocks = self.csmpElements # TODO: how to organize this?
+        self.funcGenerators = self.csmpElements
+        
         
     stateVariables = property(lambda m: m.stateVars.values())
+    memoryFunction = property(lambda m: m.csmpElements)
+    historyFuncs   = property(lambda m: m.csmpElements)
                 
     def getVariable(self, name, notFound = -99999, checkAliases = True):
         ''' get current value of a named variable 
@@ -76,6 +84,7 @@ class CSMP_Model(ABC):
         return notFound
 
         
+    
 
     def printEvent(self):
         prVars = dict([(name, self.getVariable(name, "n/a")) for name in self.printer.varNames])
@@ -83,6 +92,13 @@ class CSMP_Model(ABC):
         self.printer.print(self.timer.time, prVars)
         
         
+    def commitTimestep(self):
+        assert self.integrator.KEEP
+        for e in self.csmpElements.values():
+            if isinstance(e, MemoryFunction):
+                e.commit()
+    
+    
     def run(self):
         # self.endConditions.append(EndCondition("RES", 450, ">="))
         self.setUp()
@@ -99,17 +115,23 @@ class CSMP_Model(ABC):
             lastOut = -1
             
             while True:
+                # propagate history/memory functions:
+                self.commitTimestep()
+                
+                # print output
                 if self.timer.printRequired():
                     self.printEvent()
                     lastPrt = self.timer.time
 
-                    
+                # check finish conditions:
                 if self.finished:
                     raise NormalFinish(self.finished)
                 
+                # check final time:    
                 if self.timer.simulationComplete():                
                     raise NormalFinish(f"time >= {self.timer.finTim}")
                 
+                # run to next timestep:
                 self.integrator.run()
                 self.timer.next()
                 
@@ -124,10 +146,17 @@ class CSMP_Model(ABC):
             if dictIndex is None: return 
             if dictIndex in itemDict:
                 raise Exception(f"attempt to redefine {elementCatName} with index {index} ('{name}')")
+                raise Exception(f"attempt to redefine {elementCatName} with index {index} ('{name}')")
             itemDict[dictIndex] = element
             
-        doAdd(index)
-        doAdd(name)
+        self.csmpElements[index] = element
+        # doAdd(index)
+        # doAdd(name)
+        return element
+    
+    
+    def addCsmpElement(self, element, index):
+        self.csmpElements[index] = element
         return element
     
     
@@ -137,20 +166,32 @@ class CSMP_Model(ABC):
         return self._addElement(newFunction, self.functionBlocks, "function", index, name)
     
     
-    def createCsmpAFGEN(self, index, function, **kwargs):
-        newGenerator = Csmp_AfGen(self.functionBlocks[function], **kwargs)
+    # def createCsmpAFGEN(self, index, function, **kwargs):
+    #     newGenerator = Csmp_Afgen(self.functionBlocks[function], **kwargs)
+    #     return self._addElement(newGenerator, self.funcGenerators, "function generator", index)
+    #
+    #
+    # def createCsmpNLFGEN(self, index, function, **kwargs):
+    #     newGenerator = Csmp_Nlfgen(self.functionBlocks[function], **kwargs)
+    #     return self._addElement(newGenerator, self.funcGenerators, "function generator", index)
+    
+    
+    def createGenerator(self, index, genClass, function, **kwargs):
+        newGenerator = genClass(self.functionBlocks[function], **kwargs)
         return self._addElement(newGenerator, self.funcGenerators, "function generator", index)
     
     
-    def createCsmpNLFGEN(self, index, function, **kwargs):
-        newGenerator = Csmp_NlfGen(self.functionBlocks[function], **kwargs)
-        return self._addElement(newGenerator, self.funcGenerators, "function generator", index)
+    def createMemoryFunction(self, index, initialValues):
+        newGenerator = MemoryFunction(initialValues)
+        return self._addElement(newGenerator, self.historyFuncs, "", index)
     
     
     def createStateVariable(self, index, name, initialValue):
         newState = StateVariable(name, initialValue)
-        self._addElement(newState, self.stateVars,  "state variable", index)
-        self._addElement(newState, self.stateNames, "state variable", name = name)
+        # self._addElement(newState, self.stateVars,  "state variable", index)
+        # self._addElement(newState, self.stateNames, "state variable", name = name)
+        self.stateVars[index] = newState
+        self.stateNames[name] = newState
         return newState
     
     

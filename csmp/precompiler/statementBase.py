@@ -1,13 +1,13 @@
 import copy
 from collections import defaultdict
 from enum import Enum
+import inspect
 from warnings import warn
 import lib.ast_comments as ast
+from lib.ast_tools import setParentage, walkSmarter, dump
 
 from csmp import errors
 from csmp.precompiler.nodeWraps import NodeWrap
-from lib.smallUtilities import walkSmarter, dump
-import inspect
 
 
 class StatementStatus(Enum):
@@ -62,7 +62,7 @@ class StatementClass(NodeWrap): # TODO doubtfully distinct from Statement
     
     def __init__(self, node: ast.AST):
         super().__init__(node)
-        instanceList = StatementClass.instances[self._instanceLabel()]
+        instanceList = StatementClass.instances[0] # self._instanceLabel()]
         instanceList.append(self)
         self.index   = instanceList.index(self)
 
@@ -77,6 +77,11 @@ class StatementClass(NodeWrap): # TODO doubtfully distinct from Statement
             return stmClass(node)
         
     
+    @classmethod
+    def idList(cls):
+        return [(inst.index, inst.className(1)) for inst in StatementClass.instances[0]]
+                
+                
     @classmethod    
     def __class_getitem__(cls, name):
         return cls.classes.get(name)
@@ -143,13 +148,6 @@ class Statement(StatementClass):
         return f"{pre} {out}{self.className()}({args})"
 
     
-    @classmethod    
-    def setParentage(cls, tree):       
-        for node in ast.walk(tree):
-            for child in ast.iter_child_nodes(node):
-                child.parent = node
-    
-    
     def _argList(self, asString = True):
         items = [a for a in self.args]
         return ", ".join(items) if asString else items            
@@ -177,7 +175,7 @@ class Statement(StatementClass):
         mod    = ast.parse(source)
         result = mod.body[0]
         result.parent = self.node.parent
-        self.setParentage(result)
+        setParentage(result)
         self.sync(result)
         return result
 

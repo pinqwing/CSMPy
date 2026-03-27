@@ -1,4 +1,5 @@
-from csmp.rts import CSMP_Model
+from csmp.rts import CSMP_Model, Csmp_Afgen, Csmp_Nlfgen
+from csmp import *
 
 
 class SimulationModel(CSMP_Model):
@@ -62,3 +63,7 @@ class SimulationModel(CSMP_Model):
         """
         ":terminal:"
 
+
+
+if __name__ == '__main__':
+    SimulationModel().run()

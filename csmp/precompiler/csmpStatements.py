@@ -11,7 +11,7 @@ def transformLabelname(self): ...
 
 from pathlib import pwd
 import lib.ast_comments as ast
-from lib.smallUtilities import dump, walkSmarter
+from lib.ast_tools import dump, walkSmarter
 
 from csmp import errors
 from csmp.precompiler.lister import Lister
@@ -93,7 +93,7 @@ class FunctionGenerator(AssigningStatement):
         # transformation not valid before link is set
         if category == StatementCategory.generators:
             args = self._kwdList() 
-            return self._nodeFromString(f"self.createCsmp{self.className(0)}({self.index}, function = {self.linkedFunction}, {args})")
+            return self._nodeFromString(f"self.createGenerator({self.index}, genClass = Csmp_{self.className(1)}, function = {self.linkedFunction}, {args})")
 
         
     def transformInplace(self):
@@ -157,36 +157,28 @@ class MEMORY(AssigningStatement):
     '''
     CSMPy syntax:
     
-    MEMORY(<function call>, <initial values>)
+    <name> = MEMORY(<initial value>, <expression>)
     '''
     
     def __init__(self, node, *args, **kwargs):
-        super().__init__(node)
-        declaration = self._createObject() 
+        super().__init__(node, outputs=1)
+        if len(self.args) != 2:
+            self.args += ["'???'"]*2 # ensure at least 2 arguments
+            self.addRemark(f"{self.className()}: invalid number of arguments")
+
+        self.accessor = f"self.{self.className(2)}Function[{self.index}]"
+        
         self.transformations = {
             StatementCategory.memoryObjects:
-                self._nodeFromString(declaration)
-                }
-        
-        
-    def _createObject(self):
-        if len(self.args) == 2:
-            initVal = self.args[1]
-            initSize = len(initVal.split(","))
-            if initSize != len(self.targets):
-                self.addRemark(f"{self.className()}: invalid number of initial values ({initSize})")
-        else:
-            self.addRemark(f"{self.className()}: invalid number of arguments")
-            return "#"
-        
-        call    = f"self.create{self.className(1)}Function"
-        return f"{call}({self.index}, call = {self.args[0]}, initial = {self.args[1]})"
+                self._nodeFromString(f"self.create{self.className(1)}Function({self.index}, {self.args[0]})"),
 
+            StatementCategory.restoreValues:
+                self._nodeFromString(f"{self.name} = {self.accessor}.getCurrentValue()")
+            }
         
+
     def transformInplace(self):
-        call = f"self.{self.className(2)}Function"
-        return self._nodeFromString(f"{call}[{self.index}]({self._argList()})").value
-
+        return self._nodeFromString(f"{self.accessor}.setCurrentValue({self.args[1]})").value
 
 
 class HISTORY(MEMORY):

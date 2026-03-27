@@ -5,7 +5,7 @@ from pathlib import Path
 from lib.smallUtilities import flatten
 from csmp.precompiler.lister import Lister
 from csmp.precompiler.segment import SegmentLabel
-from csmp.precompiler.statementBase import StatementCategory
+from csmp.precompiler.statementBase import StatementCategory, StatementClass
 from csmp.precompiler.template import TemplateBuilder
 import itertools
 from csmp.precompiler.nodeWraps import NodeWrap
@@ -62,14 +62,15 @@ class PrecompilerOutput:
         
         print("\n\n", file = file)
         print(f"Parsing of {modelFileName} {completed} with {errors} error(s) and {warnings} warning(s).\n", file = file)
-        print(f"state variables: {stateVars}\n", file = file)
+        print(f"{len(self.model.states)} state variables: {stateVars}\n", file = file)
         
         constants = (self.model.consts, self.model.params, self.model.incons)
+        sizes     = [len(c) for c in constants]  
         consts = self._getConstantValues(flatten(constants))
         format = lambda coll: ([" %-8s = %-12s " % (k.name, consts.get(k.name, -99999)) for k in sorted(coll, key = lambda n: n.name)])
         items  = tuple([format(c) for c in constants])
         
-        print("   %-22s "*3 % ("CONST", "PARAM", "INCON"), file = file)
+        print("   %-22s "*3 % (f"CONST ({sizes[0]})", f"PARAM ({sizes[1]})", f"INCON ({sizes[2]})"), file = file)
         for values in itertools.zip_longest(*items, fillvalue = " "*25):
             print(*values, file = file)
             

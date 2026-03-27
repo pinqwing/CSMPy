@@ -2,6 +2,8 @@ import lib.ast_comments as ast
 import importlib.util
 import inspect
 from pathlib import Path
+from importlib.machinery import SourceFileLoader
+
 
 from csmp.precompiler.lister import Lister
 
@@ -14,7 +16,8 @@ class ModelLoader:
             raise FileNotFoundError(fileName)
         self.file   = path
         name        = path.stem.replace(".", "_")
-        spec        = importlib.util.spec_from_file_location(name, path)
+        loader      = SourceFileLoader(name, str(fileName))
+        spec        = importlib.util.spec_from_file_location(name, loader=loader)        
         self.module = importlib.util.module_from_spec(spec)
         # apply module's imports:
         try:    spec.loader.exec_module(self.module)

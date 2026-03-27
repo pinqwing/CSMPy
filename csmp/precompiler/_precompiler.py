@@ -2,6 +2,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import lib.ast_comments as ast
+from lib.ast_tools import setParentage
 from csmp.errors import PrecompilerError, SegmentationError
 from csmp.precompiler.lister import Lister, WARNING
 from csmp.precompiler.loader import ModelLoader
@@ -21,13 +22,14 @@ class CSMP_Source(ModelLoader):
         self.imports        = []
         self.init           = []
         self.segments       = ModelSegments(ast.parse("#"))
-        self.statements = defaultdict(list)
+        self.statements     = defaultdict(list)
         
     consts  = property(lambda p: p.statements[StatementCategory.constants])
     params  = property(lambda p: p.statements[StatementCategory.parameters])
     incons  = property(lambda p: p.statements[StatementCategory.incons])
     states  = property(lambda p: p.statements[StatementCategory.initStates])
-    # fundefs = property(lambda p: p.statementNodes[StatementCategory.functions]) TOD: more read-onlies?
+    memobs  = property(lambda p: p.statements[StatementCategory.memoryObjects]) 
+    funobs  = property(lambda p: p.statements[StatementCategory.functions]) 
     
         
 
@@ -64,7 +66,7 @@ class Precompiler:
         try:
             self.ast = self.model.getSyntaxTree()
             self.macroExpansion()
-            Statement.setParentage(self.ast) # after macroSubstitution
+            setParentage(self.ast) # after macroSubstitution
             self.collectDeclarations()
             self.modelSegmentation()
             self.distributeRemainingStatements()
@@ -124,22 +126,23 @@ class Precompiler:
         addReadOnly(self.model.statements[StatementCategory.functions])
 
         # link functino generators to their functions:
-        functions = dict([(f.name, f.index) for f in self.model.statements[StatementCategory.functions]])
+        functions = dict([(f.name, f.index) for f in self.model.funobs])
         for gen in self.model.statements[StatementCategory.generators]:
             gen.link(functions)
         
     
     def _validateStatement(self, statement):
+        memos = dict([(f.name, f.index) for f in self.model.memobs])
+        
         node = statement.node
         if isinstance(node, ast.Assign):
             for n in ast.walk(node.targets[0]):
                 if isinstance(n, ast.Name): 
-                    statement = self.readOnly.get(n.id, False)
-                    if statement:
-                        statement.addRemark(f"'{n.id}' is immutable while it has been declared {statement.className()}", 
+                    mutant = self.readOnly.get(n.id, False)
+                    if mutant:
+                        statement.addRemark(f"'{n.id}' is immutable while it has been declared {mutant.className()}", 
                                             originator = "validate")
-                 
-                    
+
     @Lister.withContextError
     def distributeRemainingStatements(self):
         for node in self.ast.body:
@@ -162,19 +165,20 @@ class Precompiler:
 
     @Lister.withContextError
     def sort(self):
-        consts, params, incons, states, fundefs = [self.model.statements[l]for l in (
+        consts, params, incons, states, fundefs, memobs = [self.model.statements[l]for l in (
                                                     StatementCategory.constants, StatementCategory.parameters,
                                                     StatementCategory.incons,    StatementCategory.initStates,
-                                                    StatementCategory.functions)] 
+                                                    StatementCategory.functions, StatementCategory.memoryObjects)] 
         
         codeSorter  = Sorter()
         codeSorter.useImports(self.model.imports)
         codeSorter.sort(consts, blockID = "sorter: constant section")
         codeSorter.sort(params, blockID = "sorter: parameter section")
-        codeSorter.sort(incons, blockID = "sorter: initial constants")
+        # codeSorter.sort(incons, blockID = "sorter: initial constants")
          
         for s in states:    codeSorter.addSymbol(s.name)                
         for s in fundefs:   codeSorter.addSymbol(s.name)
+        for s in memobs:   codeSorter.addSymbol(s.name)
         
         for segment in self.model.segments:
             segment.sort(codeSorter)

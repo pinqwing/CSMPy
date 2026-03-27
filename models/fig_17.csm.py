@@ -1,7 +1,4 @@
-from keywords import MACRO, TITLE, PARAM, CONSTANT, METHOD, TIMER, OUTPUT, PRINT,\
-    END
-from functions import EXP, AMIN1
-
+#@PydevCodeAnalysisIgnore
 # based on Fig 17 (pag. 56) in:
 # F.W.T. Penning de Vries and H.H. van Laar (eds.), 1982: 
 # Simulation of plant growth and crop production.

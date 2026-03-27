@@ -1,9 +1,9 @@
 import lib.ast_comments as ast
+from lib.ast_tools import dump, printNode
+from lib.smallUtilities import flatten
 from csmp import functions
 from csmp.errors import PrecompilerError
-from lib.smallUtilities import flatten, dump, printNode
 from csmp.precompiler import csmpStatements
-
 
 
 class Sorter:
@@ -11,10 +11,20 @@ class Sorter:
     def __init__(self):
         self.symbols = set(csmpStatements.symbols()) | set(functions.symbols())
         self.addSymbol("self")
+        for name in vars(csmpStatements):
+            if name == name.upper() and not name.startswith("_"):
+                self.addSymbol(name)
+        for name in vars(functions):
+            if name == name.upper() and not name.startswith("_"):
+                self.addSymbol(name)
         
     
     def addSymbol(self, name):
         self.symbols.add(name)
+        
+    def addSymbols(self, names):
+        for name in names:
+            self.addSymbol(name)
         
     
     def useImports(self, imports):
@@ -43,29 +53,6 @@ class Sorter:
             
         for wrap in imports: # one by one in order to use line numbers
             importNode(wrap)
-        
-        
-    def _useImports(self, imports):
-        blanc = ast.parse("from keywords import sys")
-        dummy = blanc.body.pop(0) 
-        for imp in imports:
-            blanc.body.append(ast.copy_location(imp.node, dummy))
-            
-        ast.fix_missing_locations(blanc)
-
-        obj = compile(blanc, filename="<ast>", mode="exec")
-        globalSymbols = {}
-        localSymbols  = {}
-        try:
-            exec(obj, globalSymbols, localSymbols)
-        except ModuleNotFoundError as e:
-            raise PrecompilerError("import error: " + e.msg)
-            
-        for name in globalSymbols:
-            self.addSymbol(name)
-            
-        for name in localSymbols:
-            self.addSymbol(name)
             
         
     def getDependencies(self, wraps):

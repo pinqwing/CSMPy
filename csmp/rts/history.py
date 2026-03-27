@@ -1,31 +1,33 @@
 from csmp import errors
 
 
+
+
 class MemoryFunction:
     
-    def __init__(self, wrappedFunction, initial = [0]):
-        if not hasattr(initial, "__iter__"):
-            raise errors.ModelError(f"initial arguments of a {type(self).__name__} must be a list or a tuple")
-        if len(initial) == 0:
-            raise errors.ModelError(f"a {type(self).__name__} must be supplied with at least one initial value")
-        self.wrappedFunction = wrappedFunction
-        self.previous        = initial[0] if len(initial) == 1 else tuple(initial)  
-        self.latest          = []
+    def __init__(self, initial = 0):
+        self.current        = initial  
+        self.changed        = None
         
         
-    def __call__(self, *args, **kwargs):
-        self.latest = self.wrappedFunction(*args, **kwargs)
-        return self.previous
+    def getCurrentValue(self):
+        return self.current
     
     
-    def stampValid(self):
-        if self.latest != []:
-            self.previous = self.latest
+    def setCurrentValue(self, value):
+        self.changed = value
+        return self.current
+    
+    
+    def commit(self):
+        self.current = self.changed
+
             
             
 class HistoryFunction(MemoryFunction):
     
     def __init__(self, wrappedFunction, initial = [0]):
+        raise errors.NotYetImplementedError("HISTORY")
         super().__init__(wrappedFunction, initial)
         self.isTuple = isinstance(self.previous, tuple)
     

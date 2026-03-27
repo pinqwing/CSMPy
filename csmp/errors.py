@@ -1,6 +1,9 @@
 import inspect
 
 
+class PrecompilerWarning(Warning): pass
+
+
 # ----- exception Hierarchy --------------------------------------------------
 
 class CSMPyError(Exception):        pass    # general ancestor

@@ -95,7 +95,7 @@ class Csmp_Function(Csmp_Method):
             self.compiletimeError("a minimum of %d data points is required" % minimumNrOfElements)
 
 
-class Csmp_AfGen(Csmp_Method):
+class Csmp_Afgen(Csmp_Method):
 
     def __init__(self, function: Csmp_Function, warnings: int = -1, extrapolation = Clip):
         ''' creates AFGEN, an arbitrary (=linear) function generator
@@ -138,7 +138,7 @@ class Csmp_AfGen(Csmp_Method):
 
 
 
-class Csmp_NlfGen(Csmp_AfGen):
+class Csmp_Nlfgen(Csmp_Afgen):
     '''
     NLFGEN function
     '''
@@ -180,7 +180,7 @@ if __name__ == '__main__':
     from datetime import datetime    
     xy = (0,1), (1,1), (2,0), (3,0)        
     fn = Csmp_Function(xy)
-    f  = Csmp_AfGen(fn, warnings = 2, extrapolation = Clip)
-    g  = Csmp_NlfGen(fn, warnings = 2, extrapolation = Clip)
+    f  = Csmp_Afgen(fn, warnings = 2, extrapolation = Clip)
+    g  = Csmp_Nlfgen(fn, warnings = 2, extrapolation = Clip)
     for i in numpy.arange(-5, 6, 0.25):
         print("%5.2f: %10.4f .. %10.4f" % (i, f(i), g(i)))
