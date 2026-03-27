@@ -195,6 +195,32 @@ Using the macro is identical in either way::
     EX1, R1 = EXPONENTIAL(10., 0.1, 5) 
 
 
+MEMORY
+~~~~~~
+
+MEMORY functions in CSMP had their syntax very much tailored to direct mempry access
+by FORTRAN routines. Furthermore, the documentation at this point is pretty obscure,
+to say the least. There seems little sense in reconstructing the same mechanism to Python,
+since an object oriented programming language makes it an awful lot easier to store data
+in permanent objects.
+However, since the precompiler cannot as yet deal with additional classes unless defined
+in their own modules, some limited support for MEMORY has been implemented in CSMPy.
+
+* CSMP::
+    MEMORY  VARNAME(n)   # declaration
+
+    VARNAME = VARNAME + 1 # update next value
+
+* CSMPy::
+    VARNAME = MEMORY(<initial value>, <update expression>)
+
+The separation between declaration and invocation no longer exists, instead, both are
+combined in a single line. MEMORY only can be applied to a variable, not to a function.
+At time=0 the variable gets the *initial value* assigned. The *update expression* as evaluated
+while KEEP = True constitutes the value to be used during the next time step.
+
+
+
 other CSMP-statements
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -203,15 +229,14 @@ keyword                                     status
 ======================================== ========================================
 RENAME      TIME = DISP, DELT = DELTX
 FIXED       K, COUNT, NUMBER                obsolete in Python
-MEMORY      RHO(9), PHI(3), GADGET
-HISTORY     PARI(4), PAR7(13)
+HISTORY     PARI(4), PAR7(13)               use objects instead
 STORAGE     IC( 6), PARAMS(30)              probably obsolete
 DECK
 END                                         ignored by the precompiler
 CONTINUE
 SORT                                        implemented            
 NOSORT                                      implemented
-PROCEDURE   X,Y = FUNCT(A, B, X)            use normap python function instead
+PROCEDURE   X,Y = FUNCT(A, B, X)            use normal python function instead
     ...
 ENDPRO
 STOP                                        ignored by the precompiler
